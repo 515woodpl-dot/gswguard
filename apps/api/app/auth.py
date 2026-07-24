@@ -1,0 +1,71 @@
+from __future__ import annotations
+
+from enum import StrEnum
+from typing import Annotated, Callable
+from uuid import UUID
+
+import jwt
+from fastapi import Depends, HTTPException, Request, status
+from pydantic import BaseModel
+
+
+class AppRole(StrEnum):
+    owner = "owner"
+    administrator = "administrator"
+    viewer = "viewer"
+
+
+class AuthenticatedUser(BaseModel):
+    user_id: UUID
+    email: str | None = None
+    role: AppRole | None = None
+    organization_id: UUID | None = None
+
+
+class JwtVerifier:
+    def __init__(self, secret: str | None, issuer: str | None, audience: str = "authenticated"):
+        self.secret = secret
+        self.issuer = issuer
+        self.audience = audience
+
+    def verify(self, token: str) -> AuthenticatedUser:
+        if not self.secret:
+            raise HTTPException(status_code=503, detail="Authentication is not configured")
+        options = {"require": ["exp", "sub"]}
+        kwargs: dict[str, object] = {"algorithms": ["HS256"], "audience": self.audience, "options": options}
+        if self.issuer:
+            kwargs["issuer"] = self.issuer
+        try:
+            claims = jwt.decode(token, self.secret, **kwargs)
+            user_id = UUID(str(claims["sub"]))
+        except (KeyError, ValueError, jwt.PyJWTError) as exc:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+        role = claims.get("role")
+        return AuthenticatedUser(
+            user_id=user_id,
+            email=claims.get("email"),
+            role=AppRole(role) if role in {r.value for r in AppRole} else None,
+            organization_id=UUID(claims["organization_id"]) if claims.get("organization_id") else None,
+        )
+
+
+def bearer_token(request: Request) -> str:
+    header = request.headers.get("Authorization", "")
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Bearer token required")
+    return token
+
+
+def current_user(request: Request, token: Annotated[str, Depends(bearer_token)]) -> AuthenticatedUser:
+    verifier: JwtVerifier = request.app.state.jwt_verifier
+    return verifier.verify(token)
+
+
+def require_roles(*allowed: AppRole) -> Callable[..., AuthenticatedUser]:
+    def dependency(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> AuthenticatedUser:
+        if user.role not in allowed:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient role")
+        return user
+
+    return dependency

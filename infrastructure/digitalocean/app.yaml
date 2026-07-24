@@ -1,0 +1,32 @@
+name: gswguard
+region: nyc
+services:
+  - name: api
+    http_port: 8000
+    dockerfile_path: apps/api/Dockerfile
+    source_dir: /
+    health_check:
+      http_path: /health/live
+    envs:
+      - key: APP_ENV
+        value: production
+      - key: SUPABASE_JWT_SECRET
+        scope: RUN_TIME
+        type: SECRET
+      - key: SUPABASE_JWT_ISSUER
+        scope: RUN_TIME
+        type: SECRET
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: RESEND_API_KEY
+        scope: RUN_TIME
+        type: SECRET
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        scope: RUN_TIME
+        type: SECRET
+  - name: dashboard
+    http_port: 3000
+    dockerfile_path: apps/dashboard/Dockerfile
+    source_dir: /
+    health_check:
+      http_path: /health

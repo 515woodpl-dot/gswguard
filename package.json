@@ -1,0 +1,18 @@
+{
+  "name": "gswguard",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Golden Stone Works endpoint-management platform",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "validate": "npm run validate:docs",
+    "validate:docs": "node scripts/validate-docs.mjs",
+    "contracts:check": "python3 scripts/generate_contract_poc.py --check",
+    "contracts:test": "python3 scripts/test_contract_poc.py",
+    "api:test": "python3 -m pytest apps/api/tests -q",
+    "dashboard:typecheck": "npm --prefix apps/dashboard run typecheck",
+    "dashboard:build": "npm --prefix apps/dashboard run build"
+  }
+}

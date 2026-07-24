@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="GSWGuard.Agent/GSWGuard.Agent.csproj" />
+  <Project Path="GSWGuard.Agent.Tests/GSWGuard.Agent.Tests.csproj" />
+</Solution>
