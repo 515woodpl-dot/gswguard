@@ -178,7 +178,7 @@ export function AuthPanel() {
   return (
     <form className="auth-panel auth-form" onSubmit={submit}>
       <div>
-        <strong>Sign in to GSWGuard</strong>
+        <strong>Sign in to YorGuard</strong>
         <p>{message}</p>
         {session && apiError ? <p className="auth-error">Backend response: {apiError}</p> : null}
       </div>

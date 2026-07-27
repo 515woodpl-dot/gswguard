@@ -13,8 +13,8 @@ export default function Home() {
   return (
     <main className="shell">
       <header className="topbar">
-        <span className="brand-mark">GSW</span>
-        <span className="brand-name">GSWGuard</span>
+        <span className="brand-mark">YG</span>
+        <span className="brand-name">YorGuard</span>
         <span className="environment">Prototype foundation</span>
       </header>
       <section className="hero" aria-labelledby="page-title">
@@ -35,7 +35,7 @@ export default function Home() {
         </div>
         <AuthPanel />
       </section>
-      <footer>GSWGuard foundation · secure-by-design endpoint management</footer>
+      <footer>YorGuard foundation · secure-by-design endpoint management</footer>
     </main>
   );
 }
