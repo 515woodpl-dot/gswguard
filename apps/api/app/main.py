@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -12,6 +12,8 @@ from .config import Settings
 from .auth import AuthenticatedUser, JwtVerifier, current_user
 from .security import RateLimitMiddleware, SecurityHeadersMiddleware
 from .membership import MembershipRepository
+from .devices import DeviceEnrollmentRequest, DeviceRepository, EnrollmentTokenRequest, device_credential
+from .enrollment import EnrollmentError, Heartbeat
 
 settings = Settings.from_environment()
 settings.validate_for_production()
@@ -38,6 +40,7 @@ app.state.jwt_verifier = JwtVerifier(
 app.state.membership_repository = (
     MembershipRepository(settings.database_url) if settings.database_url else None
 )
+app.state.device_repository = DeviceRepository(settings.database_url) if settings.database_url else None
 
 
 def health_response(request_id: UUID | None = None) -> HealthResponse:
@@ -80,3 +83,59 @@ async def ready() -> HealthResponse:
 @app.get("/api/v1/auth/me", response_model=AuthenticatedUser, tags=["auth"])
 async def me(user: Annotated[AuthenticatedUser, Depends(current_user)]) -> AuthenticatedUser:
     return user
+
+
+def device_repository(request: Request) -> DeviceRepository:
+    repository = request.app.state.device_repository
+    if repository is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    return repository
+
+
+def map_enrollment_error(error: EnrollmentError) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error.code)
+
+
+@app.get("/api/v1/devices", response_model=list, tags=["devices"])
+async def devices(
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    repository: Annotated[DeviceRepository, Depends(device_repository)],
+) -> list:
+    if user.organization_id is None:
+        raise HTTPException(status_code=403, detail="Organization membership required")
+    return repository.list_devices(user.organization_id)
+
+
+@app.post("/api/v1/enrollment-tokens", tags=["devices"])
+async def issue_enrollment_token(
+    payload: EnrollmentTokenRequest,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    repository: Annotated[DeviceRepository, Depends(device_repository)],
+) -> dict[str, object]:
+    if user.organization_id is None or user.role not in {"owner", "administrator"}:
+        raise HTTPException(status_code=403, detail="Owner or administrator role required")
+    token, expires_at = repository.issue_token(user.organization_id, user.user_id, payload)
+    return {"token": token, "expires_at": expires_at}
+
+
+@app.post("/api/v1/devices/enroll", tags=["devices"])
+async def enroll_device(
+    payload: DeviceEnrollmentRequest,
+    repository: Annotated[DeviceRepository, Depends(device_repository)],
+) -> object:
+    try:
+        return repository.enroll(payload)
+    except EnrollmentError as error:
+        raise map_enrollment_error(error) from error
+
+
+@app.post("/api/v1/devices/heartbeat", tags=["devices"])
+async def device_heartbeat(
+    payload: Heartbeat,
+    authorization: Annotated[str, Header(alias="Authorization")],
+    repository: Annotated[DeviceRepository, Depends(device_repository)],
+) -> object:
+    try:
+        return repository.heartbeat(device_credential(authorization), payload)
+    except EnrollmentError as error:
+        raise map_enrollment_error(error) from error
