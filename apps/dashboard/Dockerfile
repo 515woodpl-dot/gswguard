@@ -13,4 +13,4 @@ ENV NODE_ENV=production PORT=3000
 COPY --from=build /app/apps/dashboard/.next/standalone ./
 COPY --from=build /app/apps/dashboard/.next/static ./.next/static
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "apps/dashboard/.next/standalone/server.js"]
