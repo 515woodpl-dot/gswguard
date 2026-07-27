@@ -17,10 +17,22 @@ type ApiUser = {
   organization_id: string | null;
 };
 
+type DeviceSummary = {
+  id: string;
+  device_name: string;
+  manufacturer: string | null;
+  model: string | null;
+  agent_version: string;
+  status: string;
+  last_heartbeat_at: string | null;
+};
+
 export function AuthPanel() {
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
+  const [devices, setDevices] = useState<DeviceSummary[]>([]);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -79,6 +91,19 @@ export function AuthPanel() {
       });
   }, [config, session]);
 
+  useEffect(() => {
+    if (!config || !session || !apiUser) return;
+    void fetch(`${config.apiBaseUrl}/api/v1/devices`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Device inventory failed (${response.status})`);
+        return (await response.json()) as DeviceSummary[];
+      })
+      .then(setDevices)
+      .catch((error: unknown) => setDeviceError(error instanceof Error ? error.message : 'Unable to load devices'));
+  }, [apiUser, config, session]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!config) {
@@ -112,15 +137,41 @@ export function AuthPanel() {
 
   if (session && apiUser) {
     return (
-      <div className="auth-panel" role="status">
-        <div>
-          <strong>{apiUser.email ?? session.user.email}</strong>
-          <p>{apiUser.role ?? 'authenticated'} · API session verified</p>
+      <>
+        <div className="auth-panel" role="status">
+          <div>
+            <strong>{apiUser.email ?? session.user.email}</strong>
+            <p>{apiUser.role ?? 'authenticated'} · API session verified</p>
+          </div>
+          <button type="button" className="secondary-button" onClick={signOut}>
+            Sign out
+          </button>
         </div>
-        <button type="button" className="secondary-button" onClick={signOut}>
-          Sign out
-        </button>
-      </div>
+        <section className="device-panel" aria-labelledby="device-heading">
+          <div className="device-panel-heading">
+            <div>
+              <strong id="device-heading">Devices</strong>
+              <p>{devices.length} enrolled device{devices.length === 1 ? '' : 's'}</p>
+            </div>
+            <span className="device-count">{devices.filter((device) => device.status === 'online').length} online</span>
+          </div>
+          {deviceError ? <p className="auth-error">{deviceError}</p> : null}
+          {devices.length === 0 && !deviceError ? <p className="empty-state">No devices enrolled yet. Create an enrollment token to add the first endpoint.</p> : null}
+          {devices.length > 0 ? (
+            <div className="device-list">
+              {devices.map((device) => (
+                <div className="device-row" key={device.id}>
+                  <div>
+                    <strong>{device.device_name}</strong>
+                    <p>{[device.manufacturer, device.model].filter(Boolean).join(' · ') || 'Windows endpoint'} · Agent {device.agent_version}</p>
+                  </div>
+                  <span className={`device-status ${device.status}`}>{device.status}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+      </>
     );
   }
 
