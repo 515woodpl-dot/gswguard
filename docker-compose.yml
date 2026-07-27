@@ -10,6 +10,7 @@ services:
     build:
       context: .
       dockerfile: apps/dashboard/Dockerfile
+    command: ["node", "apps/dashboard/.next/standalone/server.js"]
     ports:
       - "3000:3000"
     depends_on:
