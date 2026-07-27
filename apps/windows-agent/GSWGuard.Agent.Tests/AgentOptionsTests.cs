@@ -1,4 +1,5 @@
 using GswGuard.Agent;
+using Xunit;
 
 namespace GswGuard.Agent.Tests;
 
