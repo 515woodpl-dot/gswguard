@@ -10,7 +10,7 @@ RUN npm --prefix apps/dashboard run build
 FROM node:20-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000
-COPY --from=build /app/apps/dashboard ./apps/dashboard
-COPY --from=build /app/apps/dashboard/.next/static ./apps/dashboard/.next/standalone/.next/static
+COPY --from=build /app/apps/dashboard/.next/standalone ./
+COPY --from=build /app/apps/dashboard/.next/static ./.next/static
 EXPOSE 3000
-CMD ["node", "apps/dashboard/.next/standalone/server.js"]
+CMD ["node", "server.js"]
