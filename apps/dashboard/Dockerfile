@@ -12,4 +12,4 @@ WORKDIR /app
 ENV NODE_ENV=production PORT=3000
 COPY --from=build /app/apps/dashboard ./apps/dashboard
 EXPOSE 3000
-CMD ["npm", "--prefix", "apps/dashboard", "run", "start"]
+CMD ["node", "apps/dashboard/.next/standalone/server.js"]
