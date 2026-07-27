@@ -71,7 +71,10 @@ export function AuthPanel() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!config) return;
+    if (!config) {
+      setMessage('Sign-in configuration is still loading. Try again in a moment.');
+      return;
+    }
     setBusy(true);
     setMessage('Signing in…');
     const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
@@ -115,7 +118,7 @@ export function AuthPanel() {
         Password
         <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
       </label>
-      <button type="submit" disabled={busy || !config}>
+      <button type="submit" disabled={busy}>
         {busy ? 'Signing in…' : 'Sign in'}
       </button>
     </form>
