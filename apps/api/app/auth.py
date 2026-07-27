@@ -23,20 +23,41 @@ class AuthenticatedUser(BaseModel):
 
 
 class JwtVerifier:
-    def __init__(self, secret: str | None, issuer: str | None, audience: str = "authenticated"):
+    def __init__(
+        self,
+        secret: str | None,
+        issuer: str | None,
+        audience: str = "authenticated",
+        jwks_url: str | None = None,
+    ):
         self.secret = secret
         self.issuer = issuer
         self.audience = audience
+        self.jwks_client = jwt.PyJWKClient(jwks_url) if jwks_url else None
 
     def verify(self, token: str) -> AuthenticatedUser:
         if not self.secret:
             raise HTTPException(status_code=503, detail="Authentication is not configured")
         options = {"require": ["exp", "sub"]}
-        kwargs: dict[str, object] = {"algorithms": ["HS256"], "audience": self.audience, "options": options}
+        try:
+            algorithm = jwt.get_unverified_header(token).get("alg")
+            if algorithm == "ES256":
+                if self.jwks_client is None:
+                    raise jwt.InvalidTokenError("JWKS verification is not configured")
+                key = self.jwks_client.get_signing_key_from_jwt(token).key
+                algorithms = ["ES256"]
+            elif algorithm == "HS256":
+                key = self.secret
+                algorithms = ["HS256"]
+            else:
+                raise jwt.InvalidAlgorithmError("Unsupported JWT algorithm")
+        except jwt.PyJWTError as exc:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+        kwargs: dict[str, object] = {"algorithms": algorithms, "audience": self.audience, "options": options}
         if self.issuer:
             kwargs["issuer"] = self.issuer
         try:
-            claims = jwt.decode(token, self.secret, **kwargs)
+            claims = jwt.decode(token, key, **kwargs)
             user_id = UUID(str(claims["sub"]))
         except (KeyError, ValueError, jwt.PyJWTError) as exc:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc

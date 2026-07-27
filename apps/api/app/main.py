@@ -32,6 +32,7 @@ app.state.jwt_verifier = JwtVerifier(
     settings.supabase_jwt_secret,
     settings.supabase_jwt_issuer,
     settings.supabase_jwt_audience,
+    settings.supabase_jwt_jwks_url,
 )
 
 
