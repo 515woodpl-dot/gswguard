@@ -33,6 +33,9 @@ export function AuthPanel() {
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [enrollmentToken, setEnrollmentToken] = useState<string | null>(null);
+  const [enrollmentTokenExpires, setEnrollmentTokenExpires] = useState<string | null>(null);
+  const [tokenBusy, setTokenBusy] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -135,6 +138,32 @@ export function AuthPanel() {
     setApiUser(null);
   }
 
+  async function createEnrollmentToken() {
+    if (!config || !session) return;
+    setTokenBusy(true);
+    setEnrollmentToken(null);
+    setEnrollmentTokenExpires(null);
+    setDeviceError(null);
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/api/v1/enrollment-tokens`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ label: 'YorGuard endpoint', ttl_minutes: 60 }),
+      });
+      const body = (await response.json()) as { token?: string; expires_at?: string; detail?: string };
+      if (!response.ok || !body.token) throw new Error(body.detail ?? `Token creation failed (${response.status})`);
+      setEnrollmentToken(body.token);
+      setEnrollmentTokenExpires(body.expires_at ? new Date(body.expires_at).toLocaleString() : null);
+    } catch (error: unknown) {
+      setDeviceError(error instanceof Error ? error.message : 'Unable to create enrollment token');
+    } finally {
+      setTokenBusy(false);
+    }
+  }
+
   if (session && apiUser) {
     return (
       <>
@@ -153,9 +182,23 @@ export function AuthPanel() {
               <strong id="device-heading">Devices</strong>
               <p>{devices.length} enrolled device{devices.length === 1 ? '' : 's'}</p>
             </div>
-            <span className="device-count">{devices.filter((device) => device.status === 'online').length} online</span>
+            <div className="device-actions">
+              <span className="device-count">{devices.filter((device) => device.status === 'online').length} online</span>
+              {apiUser.role === 'owner' || apiUser.role === 'administrator' ? (
+                <button type="button" onClick={createEnrollmentToken} disabled={tokenBusy}>
+                  {tokenBusy ? 'Creating…' : 'Create enrollment token'}
+                </button>
+              ) : null}
+            </div>
           </div>
           {deviceError ? <p className="auth-error">{deviceError}</p> : null}
+          {enrollmentToken ? (
+            <div className="token-result" role="status">
+              <strong>Copy this one-time token to the endpoint installer:</strong>
+              <code>{enrollmentToken}</code>
+              {enrollmentTokenExpires ? <span>Expires {enrollmentTokenExpires}</span> : null}
+            </div>
+          ) : null}
           {devices.length === 0 && !deviceError ? <p className="empty-state">No devices enrolled yet. Create an enrollment token to add the first endpoint.</p> : null}
           {devices.length > 0 ? (
             <div className="device-list">
