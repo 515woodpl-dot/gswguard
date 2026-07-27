@@ -21,6 +21,7 @@ export function AuthPanel() {
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('Loading sign-in…');
@@ -62,11 +63,20 @@ export function AuthPanel() {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
       .then(async (response) => {
-        if (!response.ok) throw new Error('API authentication failed');
+        if (!response.ok) {
+          const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+          throw new Error(body?.detail ?? `API authentication failed (${response.status})`);
+        }
         return (await response.json()) as ApiUser;
       })
-      .then(setApiUser)
-      .catch(() => setMessage('Supabase session is valid, but API authentication failed.'));
+      .then((user) => {
+        setApiUser(user);
+        setMessage('Signed in and API session verified.');
+      })
+      .catch((error: unknown) => {
+        setApiError(error instanceof Error ? error.message : 'API authentication failed');
+        setMessage('Supabase session is valid, but API authentication failed.');
+      });
   }, [config, session]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -109,6 +119,7 @@ export function AuthPanel() {
       <div>
         <strong>Sign in to GSWGuard</strong>
         <p>{message}</p>
+        {session && apiError ? <p className="auth-error">Backend response: {apiError}</p> : null}
       </div>
       <label>
         Email

@@ -19,7 +19,7 @@ class Settings(BaseModel):
             log_level=getenv("LOG_LEVEL", "info"),
             service_version=getenv("SERVICE_VERSION", "0.1.0"),
             supabase_jwt_secret=getenv("SUPABASE_JWT_SECRET"),
-            supabase_jwt_issuer=getenv("SUPABASE_JWT_ISSUER"),
+            supabase_jwt_issuer=(getenv("SUPABASE_JWT_ISSUER") or "").rstrip("/") or None,
             supabase_jwt_audience=getenv("SUPABASE_JWT_AUDIENCE", "authenticated"),
             cors_origins=[
                 origin.strip()

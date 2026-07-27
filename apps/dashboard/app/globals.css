@@ -26,6 +26,7 @@ h1 { max-width: 720px; margin: 1rem 0; font-size: clamp(2.5rem, 7vw, 5.6rem); li
 .status-dot { width: .7rem; height: .7rem; border-radius: 50%; background: var(--healthy); box-shadow: 0 0 0 .3rem #e2f2e9; }
 .auth-panel { display: flex; gap: 1rem; align-items: end; justify-content: space-between; margin-top: 1.5rem; padding: 1.1rem; border: 1px solid var(--line); border-radius: .8rem; background: #fff; }
 .auth-panel p { margin: .3rem 0 0; color: var(--muted); font-size: .9rem; }
+.auth-panel .auth-error { color: #a33a2b; }
 .auth-form { flex-wrap: wrap; }
 .auth-form label { display: grid; gap: .35rem; color: var(--muted); font-size: .82rem; }
 .auth-form input { min-width: 13rem; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: .55rem; background: #fff; color: inherit; }
