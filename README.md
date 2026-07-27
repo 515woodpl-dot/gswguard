@@ -1,6 +1,6 @@
-# GSWGuard
+# YorGuard
 
-GSWGuard is a lightweight endpoint-management platform for Golden Stone Works. The initial target is two company-owned Windows 11 Pro laptops, with a secure foundation for a small future fleet.
+YorGuard is a lightweight endpoint-management platform. The initial target is two company-owned Windows 11 Pro laptops, with a secure foundation for a small future fleet.
 
 ## Project status
 

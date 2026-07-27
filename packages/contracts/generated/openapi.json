@@ -105,7 +105,7 @@
     }
   },
   "info": {
-    "title": "GSWGuard API contract POC",
+    "title": "YorGuard API contract POC",
     "version": "0.1.0"
   },
   "openapi": "3.1.0",

@@ -1,4 +1,4 @@
-# GSWGuard API
+# YorGuard API
 
 Minimal FastAPI skeleton. It exposes `/health/live`, `/health/ready`, and versioned equivalents under `/api/v1/`. Business modules and database integrations begin in later phases.
 

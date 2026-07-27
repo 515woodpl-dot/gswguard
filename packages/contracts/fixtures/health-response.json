@@ -1,6 +1,6 @@
 {
   "status": "healthy",
-  "service": "gswguard-api",
+  "service": "yorguard-api",
   "version": "0.1.0",
   "checked_at": "2026-07-24T12:00:00Z",
   "request_id": "00000000-0000-0000-0000-000000000001",

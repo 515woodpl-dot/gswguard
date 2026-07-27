@@ -105,7 +105,7 @@ class EnrollmentService:
 
     def issue_token(self, organization_id: UUID, now: datetime | None = None) -> str:
         issued_at = now or datetime.now(UTC)
-        raw_token = f"gswg_enroll_{secrets.token_urlsafe(32)}"
+        raw_token = f"yorg_enroll_{secrets.token_urlsafe(32)}"
         self.store.add_token(
             EnrollmentTokenRecord(
                 token_hash=hash_secret(raw_token),
@@ -124,7 +124,7 @@ class EnrollmentService:
     ) -> EnrollmentResult:
         enrolled_at = now or datetime.now(UTC)
         record = self.store.consume_token(hash_secret(raw_token), organization_id, enrolled_at)
-        credential = f"gswg_device_{secrets.token_urlsafe(32)}"
+        credential = f"yorg_device_{secrets.token_urlsafe(32)}"
         device_id = uuid4()
         self.store.add_device(
             DeviceRecord(

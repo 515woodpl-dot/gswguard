@@ -27,4 +27,4 @@ for (const match of index.matchAll(/\]\(([^)]+\.md)\)/g)) {
   if (!existsSync(target)) throw new Error(`Broken ADR link: ${match[1]}`);
 }
 
-console.log('GSWGuard documentation validation passed.');
+console.log('YorGuard documentation validation passed.');

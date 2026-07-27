@@ -33,7 +33,7 @@ def build_openapi() -> dict[str, Any]:
     definitions = {**health.pop("$defs", {}), **error.pop("$defs", {})}
     return {
         "openapi": "3.1.0",
-        "info": {"title": "GSWGuard API contract POC", "version": "0.1.0"},
+        "info": {"title": "YorGuard API contract POC", "version": "0.1.0"},
         "paths": {
             "/api/v1/health/live": {
                 "get": {"responses": {"200": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/HealthResponse"}}}}}}
@@ -105,7 +105,7 @@ public sealed record ApiError(
 def outputs() -> dict[Path, str]:
     health_fixture = HealthResponse(
         status="healthy",
-        service="gswguard-api",
+        service="yorguard-api",
         version="0.1.0",
         checked_at="2026-07-24T12:00:00Z",
         request_id="00000000-0000-0000-0000-000000000001",

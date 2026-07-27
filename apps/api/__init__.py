@@ -1,1 +1,1 @@
-"""GSWGuard API package."""
+"""YorGuard API package."""

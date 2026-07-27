@@ -115,7 +115,7 @@ def export_pdf(records: Iterable[AuditRecord]) -> bytes:
     width, height = letter
     y = height - 40
     document.setFont("Helvetica", 9)
-    document.drawString(40, y, "GSWGuard audit export")
+    document.drawString(40, y, "YorGuard audit export")
     y -= 24
     for record in records:
         line = f"{record.created_at.isoformat()} | {record.action} | {record.outcome.value} | {record.event_hash[:12]}"

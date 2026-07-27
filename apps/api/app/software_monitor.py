@@ -76,7 +76,7 @@ class SoftwareMonitor:
         try:
             previous = self.store.latest.get(device_id)
             # The first scan establishes a baseline and does not page on every
-            # application already present before GSWGuard enrollment.
+            # application already present before YorGuard enrollment.
             changes = software_changes(previous, current) if previous is not None else []
             self.store.save_snapshot(device_id, current)
             for change in changes:

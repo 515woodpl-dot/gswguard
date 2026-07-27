@@ -9,7 +9,7 @@ public sealed class Worker(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            "GSWGuard Agent {Version} started in {Environment} mode. No privileged handlers are enabled in this skeleton.",
+            "YorGuard Agent {Version} started in {Environment} mode. No privileged handlers are enabled in this skeleton.",
             options.Value.Version,
             options.Value.Environment);
 

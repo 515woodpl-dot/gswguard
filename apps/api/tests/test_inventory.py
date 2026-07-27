@@ -15,7 +15,7 @@ from apps.api.app.inventory import (
 
 
 def snapshot(version: str = "1.0.0", include_removed: bool = False) -> InventorySnapshot:
-    software = [InstalledSoftware(name="GSW Tool", publisher="Golden Stone Works", version=version)]
+    software = [InstalledSoftware(name="YorGuard Tool", publisher="YorGuard", version=version)]
     if include_removed:
         software.append(InstalledSoftware(name="Old Tool", publisher="Example", version="2.0"))
     return InventorySnapshot(
@@ -44,7 +44,7 @@ def test_inventory_hash_is_stable_and_changes_when_inventory_changes() -> None:
 def test_software_diff_detects_add_remove_and_version_change() -> None:
     changes = software_changes(snapshot(include_removed=True), snapshot("1.1.0"))
     assert {(change.software_key, change.change_type.value) for change in changes} == {
-        ("golden stone works:gsw tool", "version_changed"),
+        ("yorguard:yorguard tool", "version_changed"),
         ("example:old tool", "removed"),
     }
 

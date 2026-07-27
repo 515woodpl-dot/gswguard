@@ -45,7 +45,7 @@ class DeviceRepository:
 
         now = datetime.now(UTC)
         expires_at = now + timedelta(minutes=request.ttl_minutes)
-        raw_token = f"gswg_enroll_{secrets.token_urlsafe(32)}"
+        raw_token = f"yorg_enroll_{secrets.token_urlsafe(32)}"
         with psycopg.connect(self.database_url) as connection:
             connection.execute(
                 """
@@ -62,7 +62,7 @@ class DeviceRepository:
         import psycopg
 
         now = datetime.now(UTC)
-        credential = f"gswg_device_{secrets.token_urlsafe(32)}"
+        credential = f"yorg_device_{secrets.token_urlsafe(32)}"
         try:
             with psycopg.connect(self.database_url) as connection:
                 with connection.transaction():

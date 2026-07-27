@@ -11,7 +11,7 @@ def test_live_health_is_structured_and_versioned() -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "healthy"
-    assert body["service"] == "gswguard-api"
+    assert body["service"] == "yorguard-api"
     assert body["request_id"]
 
 

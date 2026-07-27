@@ -1,4 +1,4 @@
-# GSWGuard dashboard
+# YorGuard dashboard
 
 Minimal Next.js dashboard skeleton. It renders a branded placeholder and exposes `/health` as a structured health route using the Phase 1C generated TypeScript contract.
 

@@ -18,7 +18,7 @@ def test_enrollment_token_is_single_use_and_credential_is_returned_once() -> Non
     now = datetime(2026, 7, 24, tzinfo=UTC)
     token = service.issue_token(organization_id, now)
     result = service.enroll(token, organization_id, "0.1.0", now + timedelta(minutes=1))
-    assert result.device_credential.startswith("gswg_device_")
+    assert result.device_credential.startswith("yorg_device_")
     assert result.device_id in service.store.devices
     with pytest.raises(EnrollmentError, match="invalid_or_expired_token"):
         service.enroll(token, organization_id, "0.1.0", now + timedelta(minutes=2))

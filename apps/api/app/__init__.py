@@ -1,1 +1,1 @@
-"""GSWGuard FastAPI application."""
+"""YorGuard FastAPI application."""

@@ -1,4 +1,4 @@
-# GSWGuard Windows agent
+# YorGuard Windows agent
 
 Minimal .NET 10 Worker Service skeleton. It supports console/development hosting and Windows Service hosting, loads typed configuration, and has no privileged management handlers yet.
 

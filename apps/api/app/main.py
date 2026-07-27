@@ -18,7 +18,7 @@ from .enrollment import EnrollmentError, Heartbeat
 settings = Settings.from_environment()
 settings.validate_for_production()
 app = FastAPI(
-    title="GSWGuard API",
+    title="YorGuard API",
     version=settings.service_version,
     docs_url="/docs" if settings.app_env != "production" else None,
 )
@@ -46,7 +46,7 @@ app.state.device_repository = DeviceRepository(settings.database_url) if setting
 def health_response(request_id: UUID | None = None) -> HealthResponse:
     return HealthResponse(
         status=HealthStatus.healthy,
-        service="gswguard-api",
+        service="yorguard-api",
         version=settings.service_version,
         checked_at=datetime.now(UTC),
         request_id=request_id or uuid4(),
