@@ -88,9 +88,19 @@ export function AuthPanel() {
     setBusy(true);
     setMessage('Signing in…');
     const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) setMessage(error.message);
+    try {
+      const result = await Promise.race([
+        supabase.auth.signInWithPassword({ email, password }),
+        new Promise<never>((_, reject) =>
+          window.setTimeout(() => reject(new Error('Sign-in request timed out. Check the Pi network connection.')), 15000),
+        ),
+      ]);
+      if (result.error) setMessage(result.error.message);
+    } catch (error: unknown) {
+      setMessage(error instanceof Error ? error.message : 'Unable to complete sign-in.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function signOut() {
