@@ -1,5 +1,6 @@
 services:
   api:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -7,6 +8,7 @@ services:
     ports:
       - "8000:8000"
   dashboard:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: apps/dashboard/Dockerfile
