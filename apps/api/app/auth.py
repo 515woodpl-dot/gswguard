@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from enum import StrEnum
 from typing import Annotated, Callable
 from uuid import UUID
@@ -7,6 +8,8 @@ from uuid import UUID
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 
 class AppRole(StrEnum):
@@ -52,6 +55,7 @@ class JwtVerifier:
             else:
                 raise jwt.InvalidAlgorithmError("Unsupported JWT algorithm")
         except jwt.PyJWTError as exc:
+            logger.warning("JWT key selection failed: %s", type(exc).__name__)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
         kwargs: dict[str, object] = {"algorithms": algorithms, "audience": self.audience, "options": options}
         if self.issuer:
@@ -60,6 +64,7 @@ class JwtVerifier:
             claims = jwt.decode(token, key, **kwargs)
             user_id = UUID(str(claims["sub"]))
         except (KeyError, ValueError, jwt.PyJWTError) as exc:
+            logger.warning("JWT verification failed: %s", type(exc).__name__)
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
         role = claims.get("role")
         return AuthenticatedUser(
