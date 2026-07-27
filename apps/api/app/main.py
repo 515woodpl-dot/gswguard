@@ -3,6 +3,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from packages.contracts.poc.source import ApiError, HealthResponse, HealthStatus
@@ -17,6 +18,13 @@ app = FastAPI(
     title="GSWGuard API",
     version=settings.service_version,
     docs_url="/docs" if settings.app_env != "production" else None,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)

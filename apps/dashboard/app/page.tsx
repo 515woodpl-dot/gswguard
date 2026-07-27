@@ -1,4 +1,5 @@
 import type { HealthResponse } from '@gswguard/contracts/generated/typescript/health';
+import { AuthPanel } from './auth-panel';
 
 const health: HealthResponse = {
   status: 'healthy',
@@ -32,6 +33,7 @@ export default function Home() {
             </p>
           </div>
         </div>
+        <AuthPanel />
       </section>
       <footer>GSWGuard foundation · secure-by-design endpoint management</footer>
     </main>

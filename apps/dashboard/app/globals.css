@@ -24,6 +24,14 @@ h1 { max-width: 720px; margin: 1rem 0; font-size: clamp(2.5rem, 7vw, 5.6rem); li
 .status-card { display: flex; align-items: center; gap: .85rem; width: fit-content; margin-top: 2.5rem; padding: 1rem 1.25rem; border: 1px solid var(--line); border-radius: .8rem; background: #fff; }
 .status-card p { margin: .25rem 0 0; color: var(--muted); font-size: .85rem; }
 .status-dot { width: .7rem; height: .7rem; border-radius: 50%; background: var(--healthy); box-shadow: 0 0 0 .3rem #e2f2e9; }
+.auth-panel { display: flex; gap: 1rem; align-items: end; justify-content: space-between; margin-top: 1.5rem; padding: 1.1rem; border: 1px solid var(--line); border-radius: .8rem; background: #fff; }
+.auth-panel p { margin: .3rem 0 0; color: var(--muted); font-size: .9rem; }
+.auth-form { flex-wrap: wrap; }
+.auth-form label { display: grid; gap: .35rem; color: var(--muted); font-size: .82rem; }
+.auth-form input { min-width: 13rem; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: .55rem; background: #fff; color: inherit; }
+.auth-panel button { padding: .68rem 1rem; border: 0; border-radius: .55rem; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
+.auth-panel button:disabled { cursor: wait; opacity: .55; }
+.auth-panel .secondary-button { background: transparent; color: var(--ink); border: 1px solid var(--line); }
 footer { padding: 1.5rem 7vw; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
 
 @media (max-width: 560px) { .environment { display: none; } .hero { padding: 3.5rem 0; } }
