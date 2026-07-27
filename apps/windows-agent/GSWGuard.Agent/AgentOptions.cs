@@ -11,4 +11,16 @@ public sealed class AgentOptions
 
     [Required, MinLength(1)]
     public string Version { get; init; } = "0.1.0";
+
+    public string ApiBaseUrl { get; init; } = "";
+
+    public string EnrollmentToken { get; init; } = "";
+
+    public string DeviceName { get; init; } = Environment.MachineName;
+
+    public string Manufacturer { get; init; } = "";
+
+    public string Model { get; init; } = "";
+
+    public string SerialNumber { get; init; } = "";
 }

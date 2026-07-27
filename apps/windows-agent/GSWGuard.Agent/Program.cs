@@ -8,6 +8,16 @@ builder.Services
     .Bind(builder.Configuration.GetSection(AgentOptions.SectionName))
     .ValidateDataAnnotations()
     .ValidateOnStart();
+builder.Services.AddHttpClient<YorGuardApiClient>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<AgentOptions>>().Value;
+    if (!string.IsNullOrWhiteSpace(options.ApiBaseUrl))
+    {
+        client.BaseAddress = new Uri(options.ApiBaseUrl.TrimEnd('/') + "/");
+    }
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddSingleton<DeviceCredentialStore>();
 builder.Services.AddWindowsService(options => options.ServiceName = "YorGuard Agent");
 builder.Services.AddHostedService<Worker>();
 
