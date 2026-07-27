@@ -11,6 +11,7 @@ from packages.contracts.poc.source import ApiError, HealthResponse, HealthStatus
 from .config import Settings
 from .auth import AuthenticatedUser, JwtVerifier, current_user
 from .security import RateLimitMiddleware, SecurityHeadersMiddleware
+from .membership import MembershipRepository
 
 settings = Settings.from_environment()
 settings.validate_for_production()
@@ -33,6 +34,9 @@ app.state.jwt_verifier = JwtVerifier(
     settings.supabase_jwt_issuer,
     settings.supabase_jwt_audience,
     settings.supabase_jwt_jwks_url,
+)
+app.state.membership_repository = (
+    MembershipRepository(settings.database_url) if settings.database_url else None
 )
 
 

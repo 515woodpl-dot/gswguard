@@ -85,7 +85,14 @@ def bearer_token(request: Request) -> str:
 
 def current_user(request: Request, token: Annotated[str, Depends(bearer_token)]) -> AuthenticatedUser:
     verifier: JwtVerifier = request.app.state.jwt_verifier
-    return verifier.verify(token)
+    user = verifier.verify(token)
+    repository = getattr(request.app.state, "membership_repository", None)
+    if repository is not None:
+        membership = repository.resolve(user.user_id)
+        if membership is not None:
+            role, organization_id = membership
+            user = user.model_copy(update={"role": role, "organization_id": organization_id})
+    return user
 
 
 def require_roles(*allowed: AppRole) -> Callable[..., AuthenticatedUser]:

@@ -7,6 +7,7 @@ class Settings(BaseModel):
     app_env: str = Field(default="development", min_length=1)
     log_level: str = Field(default="info", min_length=1)
     service_version: str = Field(default="0.1.0", min_length=1)
+    database_url: str | None = None
     supabase_jwt_secret: str | None = None
     supabase_jwt_issuer: str | None = None
     supabase_jwt_jwks_url: str | None = None
@@ -20,6 +21,7 @@ class Settings(BaseModel):
             app_env=getenv("APP_ENV", "development"),
             log_level=getenv("LOG_LEVEL", "info"),
             service_version=getenv("SERVICE_VERSION", "0.1.0"),
+            database_url=getenv("DATABASE_URL"),
             supabase_jwt_secret=getenv("SUPABASE_JWT_SECRET"),
             supabase_jwt_issuer=issuer,
             supabase_jwt_jwks_url=getenv("SUPABASE_JWT_JWKS_URL")
