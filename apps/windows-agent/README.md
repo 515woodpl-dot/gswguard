@@ -17,6 +17,14 @@ $env:Agent__DeviceName = $env:COMPUTERNAME
 ```
 
 On first start, the agent consumes the one-time token, stores the device credential using Windows DPAPI, and sends a heartbeat every five minutes. The enrollment token is never written to logs.
+
+For macOS development, use the native helper from the repository root:
+
+```bash
+python3 scripts/yorguard-receiver.py --watch 300
+```
+
+It prompts privately for a token once, stores the device credential in macOS Keychain, and sends a heartbeat every five minutes.
 ```
 
 The worker intentionally performs no device management, does not store credentials, does not execute commands, and does not claim production readiness.
