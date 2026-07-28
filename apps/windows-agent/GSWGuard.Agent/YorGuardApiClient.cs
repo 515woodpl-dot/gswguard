@@ -40,6 +40,17 @@ public sealed class YorGuardApiClient(HttpClient httpClient)
         using var response = await httpClient.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task SubmitInventoryAsync(string credential, Dictionary<string, object?> inventory, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/devices/inventory")
+        {
+            Content = JsonContent.Create(inventory),
+        };
+        request.Headers.Authorization = new("Device", credential);
+        using var response = await httpClient.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
 }
 
 public sealed record EnrollmentResponse(

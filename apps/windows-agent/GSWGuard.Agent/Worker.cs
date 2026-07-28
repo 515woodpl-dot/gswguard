@@ -6,7 +6,8 @@ public sealed class Worker(
     ILogger<Worker> logger,
     IOptions<AgentOptions> options,
     YorGuardApiClient apiClient,
-    DeviceCredentialStore credentialStore) : BackgroundService
+    DeviceCredentialStore credentialStore,
+    WindowsInventoryCollector inventoryCollector) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -44,6 +45,11 @@ public sealed class Worker(
                 }
 
                 await apiClient.SendHeartbeatAsync(credential, agentOptions.Version, stoppingToken);
+                await apiClient.SubmitInventoryAsync(
+                    credential,
+                    inventoryCollector.Collect(agentOptions),
+                    stoppingToken);
+                logger.LogInformation("YorGuard inventory submitted successfully.");
                 retryDelay = TimeSpan.FromSeconds(15);
                 await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
             }

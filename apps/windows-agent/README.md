@@ -1,6 +1,24 @@
 # YorGuard Windows agent
 
-Minimal .NET 10 Worker Service skeleton. It supports console/development hosting and Windows Service hosting, loads typed configuration, and has no privileged management handlers yet.
+This is a small Windows Service. It enrolls with a one-time token, stores the device credential with Windows DPAPI, then automatically sends a heartbeat and inventory snapshot every five minutes. It collects approved metadata only: OS/build, hardware, disks, network adapters, local account names, and installed software names/versions. It does not collect browser history, document contents, or user files.
+
+From an elevated PowerShell prompt on the Windows computer:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\scripts\install-windows-agent.ps1 `
+  -ApiBaseUrl "http://100.127.37.0:8000" `
+  -EnrollmentToken "paste-the-one-time-token-here"
+```
+
+The token is consumed during enrollment. The protected device credential is stored under `C:\ProgramData\YorGuard`.
+
+Useful service commands:
+
+```powershell
+Get-Service YorGuardAgent
+Restart-Service YorGuardAgent
+```
 
 Validation runs on `windows-latest` because the current development host has no .NET SDK or Windows APIs:
 
