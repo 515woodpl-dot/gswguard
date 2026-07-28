@@ -40,12 +40,25 @@ type JobSummary = {
   error_code?: string | null;
 };
 
+type InventorySummary = {
+  device_id: string;
+  captured_at: string;
+  snapshot: {
+    platform?: string;
+    os_version?: string;
+    cpu?: { name?: string; logical_processors?: number };
+    installed_ram_bytes?: number;
+    software?: unknown[];
+  };
+};
+
 export function AuthPanel() {
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [jobs, setJobs] = useState<JobSummary[]>([]);
+  const [latestInventory, setLatestInventory] = useState<InventorySummary[]>([]);
   const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [refreshBusy, setRefreshBusy] = useState(false);
   const [platformFilter, setPlatformFilter] = useState('all');
@@ -140,6 +153,23 @@ export function AuthPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDevices();
   }, [loadDevices]);
+
+  const loadLatestInventory = useCallback(async () => {
+    if (!config || !session || !apiUser) return;
+    await fetch(`${config.apiBaseUrl}/api/v1/inventory/latest`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Latest inventory failed (${response.status})`);
+        return (await response.json()) as InventorySummary[];
+      })
+      .then(setLatestInventory)
+      .catch((error: unknown) => setDeviceError(error instanceof Error ? error.message : 'Unable to load latest inventory'));
+  }, [apiUser, config, session]);
+
+  useEffect(() => {
+    void loadLatestInventory();
+  }, [loadLatestInventory]);
 
   const loadJobs = useCallback(async () => {
     if (!config || !session || !apiUser) return;
@@ -340,6 +370,12 @@ export function AuthPanel() {
                   <div>
                     <strong>{device.device_name}</strong>
                     <p>{device.platform} · {[device.manufacturer, device.model].filter(Boolean).join(' · ') || 'Endpoint'} · Agent {device.agent_version}</p>
+                    {(() => {
+                      const inventory = latestInventory.find((item) => item.device_id === device.id);
+                      if (!inventory) return <small>No inventory snapshot yet</small>;
+                      const ramGb = inventory.snapshot.installed_ram_bytes ? Math.round(inventory.snapshot.installed_ram_bytes / 1024 ** 3) : null;
+                      return <small>Inventory {new Date(inventory.captured_at).toLocaleString()} · {inventory.snapshot.cpu?.name ?? 'CPU'} · {ramGb ? `${ramGb} GB RAM` : 'RAM unavailable'} · {inventory.snapshot.software?.length ?? 0} apps</small>;
+                    })()}
                   </div>
                   <span className={`device-status ${device.status}`}>{device.status}</span>
                 </div>

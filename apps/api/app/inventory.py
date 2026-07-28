@@ -191,3 +191,26 @@ class InventoryRepository:
                     "captured_at": submission.captured_at,
                     "deduplicated": row is None,
                 }
+
+    def latest_for_organization(self, organization_id: Any) -> list[dict[str, Any]]:
+        import psycopg
+
+        with psycopg.connect(self.database_url) as connection:
+            rows = connection.execute(
+                """
+                select distinct on (device_id) device_id, captured_at, payload_hash, payload
+                from public.inventory_snapshots
+                where organization_id = %s
+                order by device_id, captured_at desc, created_at desc
+                """,
+                (organization_id,),
+            ).fetchall()
+        return [
+            {
+                "device_id": row[0],
+                "captured_at": row[1],
+                "payload_hash": row[2],
+                "snapshot": row[3],
+            }
+            for row in rows
+        ]

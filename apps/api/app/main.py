@@ -147,6 +147,16 @@ async def devices(
     return repository.list_devices(user.organization_id)
 
 
+@app.get("/api/v1/inventory/latest", tags=["inventory"])
+async def latest_inventory(
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    repository: Annotated[InventoryRepository, Depends(inventory_repository)],
+) -> list[dict[str, object]]:
+    if user.organization_id is None:
+        raise HTTPException(status_code=403, detail="Organization membership required")
+    return repository.latest_for_organization(user.organization_id)
+
+
 @app.post("/api/v1/enrollment-tokens", tags=["devices"])
 async def issue_enrollment_token(
     payload: EnrollmentTokenRequest,
