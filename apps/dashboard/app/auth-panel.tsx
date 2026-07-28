@@ -34,6 +34,7 @@ export function AuthPanel() {
   const [session, setSession] = useState<Session | null>(null);
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
+  const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [enrollmentToken, setEnrollmentToken] = useState<string | null>(null);
   const [enrollmentTokenExpires, setEnrollmentTokenExpires] = useState<string | null>(null);
@@ -106,7 +107,8 @@ export function AuthPanel() {
         return (await response.json()) as DeviceSummary[];
       })
       .then(setDevices)
-      .catch((error: unknown) => setDeviceError(error instanceof Error ? error.message : 'Unable to load devices'));
+      .catch((error: unknown) => setDeviceError(error instanceof Error ? error.message : 'Unable to load devices'))
+      .finally(() => setDevicesLoaded(true));
   }, [apiUser, config, session]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -167,9 +169,25 @@ export function AuthPanel() {
   }
 
   if (session && apiUser) {
+    const onlineCount = devices.filter((device) => device.status === 'online').length;
+    const attentionCount = devices.filter((device) => device.status !== 'online').length;
+    const platformCount = new Set(devices.map((device) => device.platform)).size;
     return (
       <>
-        <div className="auth-panel" role="status">
+        <div className="workspace-header">
+          <div>
+            <p className="eyebrow">YorGuard control center</p>
+            <h2>Fleet overview</h2>
+            <p>Monitor endpoint health, enrollment, and platform coverage from one workspace.</p>
+          </div>
+          <nav className="workspace-nav" aria-label="Dashboard sections">
+            <span className="active">Overview</span>
+            <span>Devices</span>
+            <span>Activity</span>
+            <span>Policies</span>
+          </nav>
+        </div>
+        <div className="auth-panel session-panel" role="status">
           <div>
             <strong>{apiUser.email ?? session.user.email}</strong>
             <p>{apiUser.role ?? 'authenticated'} · API session verified</p>
@@ -177,6 +195,12 @@ export function AuthPanel() {
           <button type="button" className="secondary-button" onClick={signOut}>
             Sign out
           </button>
+        </div>
+        <div className="metric-grid">
+          <div className="metric-card"><span>Total devices</span><strong>{devices.length}</strong><small>Enrolled endpoints</small></div>
+          <div className="metric-card metric-good"><span>Online now</span><strong>{onlineCount}</strong><small>Reporting normally</small></div>
+          <div className="metric-card metric-attention"><span>Needs attention</span><strong>{attentionCount}</strong><small>Offline or revoked</small></div>
+          <div className="metric-card"><span>Platforms</span><strong>{platformCount}</strong><small>Across the fleet</small></div>
         </div>
         <section className="device-panel" aria-labelledby="device-heading">
           <div className="device-panel-heading">
@@ -201,7 +225,8 @@ export function AuthPanel() {
               {enrollmentTokenExpires ? <span>Expires {enrollmentTokenExpires}</span> : null}
             </div>
           ) : null}
-          {devices.length === 0 && !deviceError ? <p className="empty-state">No devices enrolled yet. Create an enrollment token to add the first endpoint.</p> : null}
+          {!devicesLoaded ? <p className="empty-state">Loading device inventory…</p> : null}
+          {devicesLoaded && devices.length === 0 && !deviceError ? <p className="empty-state">No devices enrolled yet. Create an enrollment token to add the first endpoint.</p> : null}
           {devices.length > 0 ? (
             <div className="device-list">
               {devices.map((device) => (

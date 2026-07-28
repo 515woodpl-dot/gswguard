@@ -21,8 +21,7 @@ export default function Home() {
         <p className="eyebrow">YorGuard</p>
         <h1 id="page-title">Endpoint management, with a clear view of device health.</h1>
         <p className="lede">
-          The dashboard foundation is online. Device enrollment, inventory, policy, and actions will
-          be added through the approved implementation phases.
+          A focused control center for endpoint enrollment, device health, and secure fleet operations.
         </p>
         <div className="status-card" role="status">
           <span className="status-dot" aria-hidden="true" />
