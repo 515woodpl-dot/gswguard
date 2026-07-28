@@ -257,6 +257,19 @@ export function AuthPanel() {
     }
   }
 
+  function downloadWindowsBootstrap() {
+    if (!enrollmentToken || !config) return;
+    const installerUrl = 'https://raw.githubusercontent.com/515woodpl-dot/gswguard/main/scripts/install-windows-agent.ps1';
+    const script = `# YorGuard Windows bootstrap — run PowerShell as Administrator\n$ErrorActionPreference = "Stop"\n$installer = Join-Path $env:TEMP "yorguard-install-windows-agent.ps1"\nInvoke-WebRequest -Uri "${installerUrl}" -OutFile $installer\n& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -ApiBaseUrl "${config.apiBaseUrl}" -EnrollmentToken "${enrollmentToken}"\nRemove-Item $installer -Force -ErrorAction SilentlyContinue\n`;
+    const blob = new Blob([script], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'install-yorguard-windows.ps1';
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (session && apiUser) {
     const onlineCount = devices.filter((device) => device.status === 'online').length;
     const attentionCount = devices.filter((device) => device.status !== 'online').length;
@@ -324,6 +337,9 @@ export function AuthPanel() {
               {enrollmentTokenExpires ? <span>Expires {enrollmentTokenExpires}</span> : null}
               <button type="button" className="secondary-button token-copy" onClick={() => void copyEnrollmentToken()}>
                 {copyMessage ?? 'Copy token'}
+              </button>
+              <button type="button" className="secondary-button token-copy" onClick={downloadWindowsBootstrap}>
+                Download Windows bootstrap
               </button>
             </div>
           ) : null}
