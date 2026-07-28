@@ -156,6 +156,7 @@ export function AuthPanel() {
 
   const loadLatestInventory = useCallback(async () => {
     if (!config || !session || !apiUser) return;
+    setDeviceError(null);
     await fetch(`${config.apiBaseUrl}/api/v1/inventory/latest`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
@@ -164,7 +165,7 @@ export function AuthPanel() {
         return (await response.json()) as InventorySummary[];
       })
       .then(setLatestInventory)
-      .catch((error: unknown) => setDeviceError(error instanceof Error ? error.message : 'Unable to load latest inventory'));
+      .catch((error: unknown) => setDeviceError(error instanceof Error ? error.message : 'Unable to load latest inventory. Try Refresh again.'));
   }, [apiUser, config, session]);
 
   useEffect(() => {
@@ -173,6 +174,7 @@ export function AuthPanel() {
 
   const loadJobs = useCallback(async () => {
     if (!config || !session || !apiUser) return;
+    setJobError(null);
     await fetch(`${config.apiBaseUrl}/api/v1/jobs`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
@@ -181,7 +183,7 @@ export function AuthPanel() {
         return (await response.json()) as JobSummary[];
       })
       .then(setJobs)
-      .catch((error: unknown) => setJobError(error instanceof Error ? error.message : 'Unable to load jobs'));
+      .catch((error: unknown) => setJobError(error instanceof Error ? error.message : 'Unable to load jobs. Try Refresh jobs again.'));
   }, [apiUser, config, session]);
 
   useEffect(() => {
