@@ -94,6 +94,24 @@ class JobRequest(BaseModel):
         return self
 
 
+class JobCreateRequest(BaseModel):
+    device_id: UUID
+    action_type: ActionType
+    action_payload: dict[str, Any] = Field(default_factory=dict)
+    reason: str | None = Field(default=None, max_length=500)
+    idempotency_key: str = Field(min_length=8, max_length=160)
+    expires_in_seconds: int = Field(default=86_400, ge=60, le=604_800)
+    confirmed: bool = False
+
+
+class JobResultRequest(BaseModel):
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+class JobFailureRequest(BaseModel):
+    error_code: str = Field(min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9._-]+$")
+
+
 @dataclass
 class Job:
     id: UUID
@@ -105,6 +123,218 @@ class Job:
     claim_expires_at: datetime | None = None
     result: dict[str, Any] | None = None
     error_code: str | None = None
+
+
+class JobRepositoryError(Exception):
+    def __init__(self, code: str):
+        self.code = code
+        super().__init__(code)
+
+
+class PostgresJobRepository:
+    """Transactional PostgreSQL job adapter used by the API and agents."""
+
+    def __init__(self, database_url: str):
+        self.database_url = database_url
+
+    @staticmethod
+    def _job_from_row(row) -> Job:
+        request = JobRequest(
+            organization_id=row[1],
+            device_id=row[2],
+            action_type=row[3],
+            action_payload=row[4] or {},
+            created_by=row[5],
+            reason=row[6],
+            idempotency_key=row[7],
+            expires_in_seconds=max(60, int((row[9] - row[8]).total_seconds())),
+            confirmed=True,
+        )
+        return Job(
+            id=row[0],
+            request=request,
+            status=JobStatus(row[10]),
+            created_at=row[8],
+            expires_at=row[9],
+            attempt_count=row[11],
+            claim_expires_at=row[12],
+            result=row[13],
+            error_code=row[14],
+        )
+
+    def create(self, request: JobRequest, now: datetime | None = None) -> Job:
+        import psycopg
+        from psycopg.types.json import Jsonb
+
+        created_at = now or datetime.now(UTC)
+        expires_at = created_at + timedelta(seconds=request.expires_in_seconds)
+        columns = "id, organization_id, device_id, action_type, action_payload, created_by, reason, idempotency_key, created_at, expires_at, status, attempt_count, claim_expires_at, result, error_code"
+        try:
+            with psycopg.connect(self.database_url) as connection:
+                with connection.transaction():
+                    device = connection.execute(
+                        "select organization_id, status::text from public.devices where id = %s for share",
+                        (request.device_id,),
+                    ).fetchone()
+                    if device is None or device[0] != request.organization_id or device[1] == "revoked":
+                        raise JobRepositoryError("device_not_found")
+                    row = connection.execute(
+                        f"""
+                        insert into public.jobs
+                          (organization_id, device_id, action_type, action_payload, created_by, reason,
+                           idempotency_key, confirmation_at, expires_at, status)
+                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'pending')
+                        on conflict (organization_id, device_id, idempotency_key) do nothing
+                        returning {columns}
+                        """,
+                        (
+                            request.organization_id,
+                            request.device_id,
+                            request.action_type.value,
+                            Jsonb(request.action_payload),
+                            request.created_by,
+                            request.reason,
+                            request.idempotency_key,
+                            created_at if request.confirmed else None,
+                            expires_at,
+                        ),
+                    ).fetchone()
+                    created_new = row is not None
+                    if row is None:
+                        row = connection.execute(
+                            f"select {columns} from public.jobs where organization_id = %s and device_id = %s and idempotency_key = %s",
+                            (request.organization_id, request.device_id, request.idempotency_key),
+                        ).fetchone()
+                    if row is None:
+                        raise JobRepositoryError("job_create_failed")
+                    if created_new:
+                        from .audit import AuditOutcome, append_audit_in_transaction
+
+                        append_audit_in_transaction(
+                            connection,
+                            organization_id=request.organization_id,
+                            actor_type="user",
+                            actor_id=request.created_by,
+                            action="job.created",
+                            outcome=AuditOutcome.accepted,
+                            target_type="job",
+                            target_id=row[0],
+                            reason=request.reason,
+                            metadata={"action_type": request.action_type.value},
+                        )
+                    return self._job_from_row(row)
+        except JobRepositoryError:
+            raise
+        except psycopg.errors.UniqueViolation as exc:
+            raise JobRepositoryError("job_conflict") from exc
+
+    def list_for_organization(self, organization_id: UUID, limit: int = 100) -> list[Job]:
+        import psycopg
+
+        columns = "id, organization_id, device_id, action_type, action_payload, created_by, reason, idempotency_key, created_at, expires_at, status, attempt_count, claim_expires_at, result, error_code"
+        with psycopg.connect(self.database_url) as connection:
+            rows = connection.execute(
+                f"select {columns} from public.jobs where organization_id = %s order by created_at desc limit %s",
+                (organization_id, limit),
+            ).fetchall()
+        return [self._job_from_row(row) for row in rows]
+
+    def claim_for_device(self, credential: str, lease_seconds: int = 120) -> Job | None:
+        import psycopg
+
+        from .enrollment import hash_secret
+
+        columns = "j.id, j.organization_id, j.device_id, j.action_type, j.action_payload, j.created_by, j.reason, j.idempotency_key, j.created_at, j.expires_at, j.status, j.attempt_count, j.claim_expires_at, j.result, j.error_code"
+        with psycopg.connect(self.database_url) as connection:
+            with connection.transaction():
+                connection.execute(
+                    """
+                    update public.jobs j
+                    set status = 'pending', claim_expires_at = null
+                    where j.status = 'claimed' and j.claim_expires_at < now()
+                      and exists (select 1 from public.devices d where d.id = j.device_id and d.credential_hash = %s)
+                    """,
+                    (hash_secret(credential),),
+                )
+                row = connection.execute(
+                    f"""
+                    with candidate as (
+                      select j.id
+                      from public.jobs j
+                      join public.devices d on d.id = j.device_id
+                      where d.credential_hash = %s and d.status <> 'revoked'
+                        and j.status = 'pending' and j.expires_at > now()
+                        and j.attempt_count < j.max_attempts
+                      order by j.created_at asc
+                      for update of j skip locked
+                      limit 1
+                    )
+                    update public.jobs j
+                    set status = 'claimed', attempt_count = j.attempt_count + 1,
+                        claimed_at = now(), claim_expires_at = now() + (%s * interval '1 second')
+                    from candidate c
+                    where j.id = c.id
+                    returning {columns}
+                    """,
+                    (hash_secret(credential), lease_seconds),
+                ).fetchone()
+                if row:
+                    from .audit import AuditOutcome, append_audit_in_transaction
+
+                    append_audit_in_transaction(
+                        connection,
+                        organization_id=row[1],
+                        actor_type="device",
+                        actor_id=row[2],
+                        action="job.claimed",
+                        outcome=AuditOutcome.accepted,
+                        target_type="job",
+                        target_id=row[0],
+                    )
+                return self._job_from_row(row) if row else None
+
+    def _finish_for_device(self, credential: str, job_id: UUID, *, result: dict[str, Any] | None = None, error_code: str | None = None) -> Job:
+        import psycopg
+        from psycopg.types.json import Jsonb
+
+        from .enrollment import hash_secret
+
+        columns = "j.id, j.organization_id, j.device_id, j.action_type, j.action_payload, j.created_by, j.reason, j.idempotency_key, j.created_at, j.expires_at, j.status, j.attempt_count, j.claim_expires_at, j.result, j.error_code"
+        next_status = "succeeded" if error_code is None else "failed"
+        with psycopg.connect(self.database_url) as connection:
+            with connection.transaction():
+                row = connection.execute(
+                    f"""
+                    update public.jobs j
+                    set status = %s, completed_at = now(), result = %s, error_code = %s
+                    where j.id = %s and j.status = 'claimed'
+                      and exists (select 1 from public.devices d where d.id = j.device_id and d.credential_hash = %s and d.status <> 'revoked')
+                    returning {columns}
+                    """,
+                    (next_status, Jsonb(result or {}), error_code, job_id, hash_secret(credential)),
+                ).fetchone()
+                if row is None:
+                    raise JobRepositoryError("job_not_claimed_or_device_unauthorized")
+                from .audit import AuditOutcome, append_audit_in_transaction
+
+                append_audit_in_transaction(
+                    connection,
+                    organization_id=row[1],
+                    actor_type="device",
+                    actor_id=row[2],
+                    action="job.completed" if error_code is None else "job.failed",
+                    outcome=AuditOutcome.succeeded if error_code is None else AuditOutcome.failed,
+                    target_type="job",
+                    target_id=row[0],
+                    metadata={"error_code": error_code} if error_code else {},
+                )
+                return self._job_from_row(row)
+
+    def complete_for_device(self, credential: str, job_id: UUID, result: dict[str, Any]) -> Job:
+        return self._finish_for_device(credential, job_id, result=result)
+
+    def fail_for_device(self, credential: str, job_id: UUID, error_code: str) -> Job:
+        return self._finish_for_device(credential, job_id, error_code=error_code)
 
 
 class InMemoryJobStore:

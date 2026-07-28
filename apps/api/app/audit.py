@@ -16,6 +16,85 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
 
+def append_audit_in_transaction(
+    connection,
+    *,
+    organization_id: UUID,
+    actor_type: str,
+    actor_id: UUID | None,
+    action: str,
+    outcome: AuditOutcome,
+    target_type: str | None = None,
+    target_id: UUID | None = None,
+    reason: str | None = None,
+    correlation_id: UUID | None = None,
+    metadata: dict[str, str] | None = None,
+) -> UUID:
+    """Append one hash-chained audit row using the caller's transaction."""
+    import psycopg
+    from psycopg.types.json import Jsonb
+
+    event_id = uuid4()
+    created_at = datetime.now(UTC)
+    audit_metadata = metadata or {}
+    # Serialize hash-chain appends per organization. Without a transaction
+    # lock, two first writers could both observe GENESIS and fork the chain.
+    connection.execute("select pg_advisory_xact_lock(hashtext(%s))", (str(organization_id),))
+    previous_row = connection.execute(
+        """
+        select event_hash from public.audit_log
+        where organization_id = %s
+        order by created_at desc, id desc
+        limit 1
+        for update
+        """,
+        (organization_id,),
+    ).fetchone()
+    previous_hash = previous_row[0] if previous_row and previous_row[0] else "GENESIS"
+    payload = {
+        "id": str(event_id),
+        "organization_id": str(organization_id),
+        "actor_user_id": str(actor_id) if actor_id else None,
+        "actor_type": actor_type,
+        "action": action,
+        "target_type": target_type,
+        "target_id": str(target_id) if target_id else None,
+        "correlation_id": str(correlation_id) if correlation_id else None,
+        "outcome": outcome.value,
+        "reason": reason,
+        "metadata": audit_metadata,
+        "created_at": created_at.isoformat(),
+    }
+    event_hash = hashlib.sha256(
+        (previous_hash + json.dumps(payload, sort_keys=True, separators=(",", ":"))).encode()
+    ).hexdigest()
+    connection.execute(
+        """
+        insert into public.audit_log
+          (id, organization_id, actor_user_id, actor_type, action, target_type, target_id,
+           correlation_id, outcome, reason, metadata, created_at, previous_hash, event_hash)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            event_id,
+            organization_id,
+            actor_id,
+            actor_type,
+            action,
+            target_type,
+            target_id,
+            correlation_id,
+            outcome.value,
+            reason,
+            Jsonb(audit_metadata),
+            created_at,
+            previous_hash,
+            event_hash,
+        ),
+    )
+    return event_id
+
+
 class AuditOutcome(StrEnum):
     accepted = "accepted"
     succeeded = "succeeded"
