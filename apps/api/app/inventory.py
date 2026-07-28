@@ -163,12 +163,16 @@ class InventoryRepository:
                 if device is None or device[2] == "revoked":
                     raise ValueError("invalid_device_credential")
                 device_id, organization_id, _status = device
+                # Keep one current snapshot per device during testing.
+                connection.execute(
+                    "delete from public.inventory_snapshots where device_id = %s",
+                    (device_id,),
+                )
                 row = connection.execute(
                     """
                     insert into public.inventory_snapshots
                       (organization_id, device_id, captured_at, payload_hash, payload)
                     values (%s, %s, %s, %s, %s)
-                    on conflict (device_id, payload_hash) do nothing
                     returning id
                     """,
                     (organization_id, device_id, submission.captured_at, payload_hash, Jsonb(payload)),

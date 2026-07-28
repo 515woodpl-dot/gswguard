@@ -143,14 +143,9 @@ def process_test_job(api_base_url: str, credential: str, device_name: str, agent
         return
     job_id = job["id"]
     if job.get("action_type") == "refresh_inventory":
-        inventory = request_json(
-            f"{api_base_url.rstrip('/')}/api/v1/devices/inventory",
-            collect_mac_inventory(device_name, agent_version),
-            {"Authorization": f"Device {credential}"},
-        )
         request_json(
             f"{api_base_url.rstrip('/')}/api/v1/device/jobs/{job_id}/complete",
-            {"result": {"code": "inventory_submitted", "snapshot_id": inventory.get("snapshot_id"), "payload_hash": inventory.get("payload_hash")}},
+            {"result": {"code": "inventory_submitted"}},
             {"Authorization": f"Device {credential}"},
         )
         print(f"Acknowledged test job {job_id}")
@@ -161,6 +156,14 @@ def process_test_job(api_base_url: str, credential: str, device_name: str, agent
             {"Authorization": f"Device {credential}"},
         )
         print(f"Rejected unsupported job {job_id}")
+
+
+def submit_inventory(api_base_url: str, credential: str, device_name: str, agent_version: str) -> None:
+    request_json(
+        f"{api_base_url.rstrip('/')}/api/v1/devices/inventory",
+        collect_mac_inventory(device_name, agent_version),
+        {"Authorization": f"Device {credential}"},
+    )
 
 
 def main() -> None:
@@ -198,6 +201,8 @@ def main() -> None:
             heartbeat(args.api_base_url, credential, args.agent_version)
             print(f"Heartbeat accepted at {datetime.now().astimezone().isoformat(timespec='seconds')}")
             if args.jobs:
+                submit_inventory(args.api_base_url, credential, args.device_name, args.agent_version)
+                print("Inventory snapshot submitted")
                 process_test_job(args.api_base_url, credential, args.device_name, args.agent_version)
             retry_delay = 15
             if not args.watch:
