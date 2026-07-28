@@ -72,9 +72,7 @@ export function AuthPanel() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('Loading sign-in…');
   const [busy, setBusy] = useState(false);
-  const [jobBusy, setJobBusy] = useState(false);
   const [jobError, setJobError] = useState<string | null>(null);
-  const [selectedDeviceId, setSelectedDeviceId] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -259,40 +257,17 @@ export function AuthPanel() {
     }
   }
 
-  async function createInventoryJob() {
-    if (!config || !session || !selectedDeviceId) return;
-    setJobBusy(true);
-    setJobError(null);
-    try {
-      const response = await fetch(`${config.apiBaseUrl}/api/v1/jobs`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          device_id: selectedDeviceId,
-          action_type: 'refresh_inventory',
-          idempotency_key: `inventory-${selectedDeviceId}-${Date.now()}`,
-          confirmed: true,
-        }),
-      });
-      const body = (await response.json().catch(() => null)) as { detail?: string } | null;
-      if (!response.ok) throw new Error(body?.detail ?? `Job creation failed (${response.status})`);
-      await loadJobs();
-    } catch (error: unknown) {
-      setJobError(error instanceof Error ? error.message : 'Unable to create job');
-    } finally {
-      setJobBusy(false);
-    }
-  }
-
   if (session && apiUser) {
     const onlineCount = devices.filter((device) => device.status === 'online').length;
     const attentionCount = devices.filter((device) => device.status !== 'online').length;
     const platformCount = new Set(devices.map((device) => device.platform)).size;
     const platforms = Array.from(new Set(devices.map((device) => device.platform))).sort();
     const visibleDevices = platformFilter === 'all' ? devices : devices.filter((device) => device.platform === platformFilter);
+    const latestJobs = Array.from(jobs.reduce((latest, job) => {
+      const key = `${job.device_id}:${job.action_type}`;
+      if (!latest.has(key)) latest.set(key, job);
+      return latest;
+    }, new Map<string, JobSummary>()).values());
     return (
       <>
         <div className="workspace-header" id="overview">
@@ -390,28 +365,16 @@ export function AuthPanel() {
           <div className="device-panel-heading">
             <div>
               <strong id="job-heading">Job Center</strong>
-              <p>Safe testing action: request an inventory refresh.</p>
+              <p>Inventory reporting runs automatically in the endpoint receiver.</p>
             </div>
             <div className="device-actions">
               <button type="button" className="secondary-button" onClick={() => void loadJobs()}>Refresh jobs</button>
             </div>
           </div>
-          <div className="job-create">
-            <label>
-              Test device
-              <select value={selectedDeviceId} onChange={(event) => setSelectedDeviceId(event.target.value)}>
-                <option value="">Choose an enrolled device</option>
-                {devices.map((device) => <option key={device.id} value={device.id}>{device.device_name} · {device.platform}</option>)}
-              </select>
-            </label>
-            <button type="button" onClick={() => void createInventoryJob()} disabled={jobBusy || !selectedDeviceId}>
-              {jobBusy ? 'Submitting…' : 'Request inventory refresh'}
-            </button>
-          </div>
           {jobError ? <p className="auth-error">{jobError}</p> : null}
-          {jobs.length === 0 ? <p className="empty-state">No jobs submitted yet.</p> : (
+          {latestJobs.length === 0 ? <p className="empty-state">No endpoint jobs recorded.</p> : (
             <div className="job-list">
-              {jobs.slice(0, 10).map((job) => (
+              {latestJobs.map((job) => (
                 <div className="job-row" key={job.id}>
                   <div><strong>{job.action_type}</strong><p>{job.device_id} · {new Date(job.created_at).toLocaleString()}</p></div>
                   <span className={`device-status ${job.status}`}>{job.status}</span>
