@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "Golden Stone Works endpoint-management platform",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "validate": "npm run validate:docs",
