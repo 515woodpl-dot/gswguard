@@ -23,6 +23,8 @@ type DeviceSummary = {
   manufacturer: string | null;
   model: string | null;
   agent_version: string;
+  platform: string;
+  os_version: string | null;
   status: string;
   last_heartbeat_at: string | null;
 };
@@ -206,7 +208,7 @@ export function AuthPanel() {
                 <div className="device-row" key={device.id}>
                   <div>
                     <strong>{device.device_name}</strong>
-                    <p>{[device.manufacturer, device.model].filter(Boolean).join(' · ') || 'Windows endpoint'} · Agent {device.agent_version}</p>
+                    <p>{device.platform} · {[device.manufacturer, device.model].filter(Boolean).join(' · ') || 'Endpoint'} · Agent {device.agent_version}</p>
                   </div>
                   <span className={`device-status ${device.status}`}>{device.status}</span>
                 </div>

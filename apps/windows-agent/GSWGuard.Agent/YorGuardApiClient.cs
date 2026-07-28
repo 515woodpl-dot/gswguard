@@ -17,6 +17,8 @@ public sealed class YorGuardApiClient(HttpClient httpClient)
                 model = options.Model,
                 serial_number = options.SerialNumber,
                 agent_version = options.Version,
+                platform = "windows",
+                os_version = Environment.OSVersion.VersionString,
             },
             cancellationToken);
         response.EnsureSuccessStatusCode();

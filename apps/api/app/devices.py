@@ -22,6 +22,8 @@ class DeviceEnrollmentRequest(BaseModel):
     model: str | None = Field(default=None, max_length=160)
     serial_number: str | None = Field(default=None, max_length=160)
     agent_version: str = Field(min_length=1, max_length=40)
+    platform: str = Field(default="unknown", pattern="^(windows|macos|ios|ipados|android|linux|unknown)$")
+    os_version: str | None = Field(default=None, max_length=80)
 
 
 class DeviceSummary(BaseModel):
@@ -31,6 +33,8 @@ class DeviceSummary(BaseModel):
     model: str | None
     serial_number: str | None
     agent_version: str
+    platform: str
+    os_version: str | None
     status: str
     enrolled_at: datetime
     last_heartbeat_at: datetime | None
@@ -82,8 +86,8 @@ class DeviceRepository:
                         """
                         insert into public.devices
                           (organization_id, device_name, manufacturer, model, serial_number,
-                           agent_version, credential_hash, status, enrolled_at, last_heartbeat_at)
-                        values (%s, %s, %s, %s, %s, %s, %s, 'online', %s, %s)
+                           agent_version, platform, os_version, credential_hash, status, enrolled_at, last_heartbeat_at)
+                        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'online', %s, %s)
                         returning id
                         """,
                         (
@@ -93,6 +97,8 @@ class DeviceRepository:
                             request.model,
                             request.serial_number,
                             request.agent_version,
+                            request.platform,
+                            request.os_version,
                             hash_secret(credential),
                             now,
                             now,
@@ -139,7 +145,7 @@ class DeviceRepository:
         with psycopg.connect(self.database_url) as connection:
             rows = connection.execute(
                 """
-                select id, device_name, manufacturer, model, serial_number, agent_version,
+                select id, device_name, manufacturer, model, serial_number, agent_version, platform, os_version,
                        case when status = 'online' and (last_heartbeat_at is null or last_heartbeat_at < now() - interval '5 minutes')
                             then 'offline' else status::text end as effective_status,
                        enrolled_at, last_heartbeat_at

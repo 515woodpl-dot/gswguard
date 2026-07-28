@@ -81,6 +81,8 @@ def main() -> None:
                 "manufacturer": "Apple",
                 "model": "Mac",
                 "agent_version": args.agent_version,
+                "platform": "macos",
+                "os_version": os.uname().release,
             },
         )
         credential = enrollment["device_credential"]
