@@ -16,6 +16,7 @@ from .membership import MembershipRepository
 from .devices import DeviceEnrollmentRequest, DeviceRepository, EnrollmentTokenRequest, device_credential
 from .enrollment import EnrollmentError, Heartbeat
 from .jobs import JobCreateRequest, JobFailureRequest, JobRepositoryError, JobRequest, JobResultRequest, PostgresJobRepository
+from .inventory import InventoryRepository, InventorySubmission
 
 settings = Settings.from_environment()
 settings.validate_for_production()
@@ -44,6 +45,7 @@ app.state.membership_repository = (
 )
 app.state.device_repository = DeviceRepository(settings.database_url) if settings.database_url else None
 app.state.job_repository = PostgresJobRepository(settings.database_url) if settings.database_url else None
+app.state.inventory_repository = InventoryRepository(settings.database_url) if settings.database_url else None
 
 
 def health_response(request_id: UUID | None = None) -> HealthResponse:
@@ -111,6 +113,13 @@ def device_repository(request: Request) -> DeviceRepository:
 
 def job_repository(request: Request) -> PostgresJobRepository:
     repository = request.app.state.job_repository
+    if repository is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    return repository
+
+
+def inventory_repository(request: Request) -> InventoryRepository:
+    repository = request.app.state.inventory_repository
     if repository is None:
         raise HTTPException(status_code=503, detail="Database is not configured")
     return repository
@@ -283,3 +292,17 @@ async def device_heartbeat(
         return repository.heartbeat(device_credential(authorization), payload)
     except EnrollmentError as error:
         raise map_enrollment_error(error) from error
+
+
+@app.post("/api/v1/devices/inventory", tags=["inventory"])
+async def submit_inventory(
+    payload: InventorySubmission,
+    authorization: Annotated[str, Header(alias="Authorization")],
+    repository: Annotated[InventoryRepository, Depends(inventory_repository)],
+) -> dict[str, object]:
+    try:
+        return repository.submit(device_credential(authorization), payload)
+    except EnrollmentError as error:
+        raise map_enrollment_error(error) from error
+    except ValueError as error:
+        raise map_enrollment_error(EnrollmentError(str(error))) from error

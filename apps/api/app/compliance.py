@@ -68,7 +68,7 @@ class FieldRule:
 
     def evaluate(self, policy: PolicyDefinition, snapshot: InventorySnapshot) -> RuleResult:
         if self.rule_type == RuleKey.windows_edition:
-            actual = snapshot.windows.edition
+            actual = snapshot.windows.edition if snapshot.windows else "not_available"
         else:
             actual = getattr(snapshot.security, self.rule_type.value)
         passed = actual.casefold() == policy.expected_value.casefold()

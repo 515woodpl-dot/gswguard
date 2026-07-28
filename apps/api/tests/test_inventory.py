@@ -58,3 +58,25 @@ def test_inventory_model_rejects_unapproved_surveillance_fields() -> None:
         assert "browser_history" in str(error)
     else:
         raise AssertionError("prohibited inventory field was accepted")
+
+
+def test_cross_platform_inventory_does_not_require_windows_fields() -> None:
+    item = InventorySnapshot(
+        platform="macos",
+        device_name="Mac development receiver",
+        manufacturer="Apple",
+        model="Mac",
+        serial_number="unknown",
+        cpu=CpuInfo(name="Apple Silicon", logical_processors=8),
+        installed_ram_bytes=8,
+        storage=[],
+        network_adapters=[],
+        security=SecurityPosture(
+            bitlocker="not_applicable", firewall="not_collected", defender="not_applicable",
+            secure_boot="not_collected", tpm="not_collected", automatic_updates="not_collected",
+        ),
+        local_accounts=[],
+        software=[],
+        agent_version="0.1.0",
+    )
+    assert item.windows is None

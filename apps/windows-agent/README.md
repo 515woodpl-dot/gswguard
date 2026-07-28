@@ -26,4 +26,12 @@ python3 scripts/yorguard-receiver.py --watch 30 --jobs
 ```
 
 It prompts privately for a token once, stores the device credential in macOS Keychain, and sends a heartbeat every five minutes.
+
+To keep the Mac receiver running automatically after login, install its LaunchAgent once:
+
+```bash
+bash scripts/install-macos-receiver.sh
+```
+
+After installation, the receiver runs in the background, sends heartbeats, claims safe inventory-refresh jobs, collects approved device metadata locally, and submits snapshots. The enrollment token and device credential remain outside the LaunchAgent plist.
 The worker intentionally performs no device management or command execution and does not claim production readiness.

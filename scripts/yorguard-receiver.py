@@ -7,6 +7,8 @@ import argparse
 import getpass
 import json
 import os
+import plistlib
+import shutil
 import subprocess
 import sys
 import time
@@ -62,7 +64,75 @@ def heartbeat(api_base_url: str, credential: str, agent_version: str) -> None:
     )
 
 
-def process_test_job(api_base_url: str, credential: str) -> None:
+def run_text(command: list[str]) -> str:
+    result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=10)
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def collect_mac_inventory(device_name: str, agent_version: str) -> dict:
+    os_version = run_text(["sw_vers", "-productVersion"]) or os.uname().release
+    model = run_text(["sysctl", "-n", "hw.model"]) or "Mac"
+    cpu_name = run_text(["sysctl", "-n", "machdep.cpu.brand_string"]) or model
+    logical_processors = int(run_text(["sysctl", "-n", "hw.logicalcpu"]) or "1")
+    ram_bytes = int(run_text(["sysctl", "-n", "hw.memsize"]) or "0")
+    serial_output = run_text(["ioreg", "-rd1", "-c", "IOPlatformExpertDevice"])
+    serial_number = "unknown"
+    for line in serial_output.splitlines():
+        if "IOPlatformSerialNumber" in line and "=" in line:
+            serial_number = line.split("=", 1)[1].strip().strip('"') or "unknown"
+            break
+    disk = shutil.disk_usage("/")
+    storage = [{"name": "/", "capacity_bytes": disk.total, "free_bytes": disk.free}]
+    software = []
+    for applications in ("/Applications", os.path.expanduser("~/Applications")):
+        if not os.path.isdir(applications):
+            continue
+        for entry in os.listdir(applications):
+            if not entry.endswith(".app"):
+                continue
+            info_path = os.path.join(applications, entry, "Contents", "Info.plist")
+            try:
+                with open(info_path, "rb") as info_file:
+                    info = plistlib.load(info_file)
+                software.append({
+                    "name": str(info.get("CFBundleDisplayName") or info.get("CFBundleName") or entry[:-4]),
+                    "publisher": None,
+                    "version": str(info.get("CFBundleShortVersionString") or info.get("CFBundleVersion") or "unknown"),
+                    "architecture": None,
+                    "install_source": "Applications",
+                })
+            except (OSError, plistlib.InvalidFileException, ValueError):
+                continue
+            if len(software) >= 2000:
+                break
+    return {
+        "snapshot": {
+            "platform": "macos",
+            "device_name": device_name,
+            "manufacturer": "Apple",
+            "model": model,
+            "serial_number": serial_number,
+            "os_version": os_version,
+            "cpu": {"name": cpu_name, "logical_processors": max(1, logical_processors)},
+            "installed_ram_bytes": max(0, ram_bytes),
+            "storage": storage,
+            "network_adapters": [],
+            "security": {
+                "bitlocker": "not_applicable",
+                "firewall": "not_collected",
+                "defender": "not_applicable",
+                "secure_boot": "not_collected",
+                "tpm": "not_collected",
+                "automatic_updates": "not_collected",
+            },
+            "local_accounts": [{"name": getpass.getuser(), "account_type": "local", "is_administrator": False}],
+            "software": software,
+            "agent_version": agent_version,
+        }
+    }
+
+
+def process_test_job(api_base_url: str, credential: str, device_name: str, agent_version: str) -> None:
     """Claim and acknowledge only the non-privileged inventory test action."""
     job = request_json(
         f"{api_base_url.rstrip('/')}/api/v1/device/jobs/claim",
@@ -73,9 +143,14 @@ def process_test_job(api_base_url: str, credential: str) -> None:
         return
     job_id = job["id"]
     if job.get("action_type") == "refresh_inventory":
+        inventory = request_json(
+            f"{api_base_url.rstrip('/')}/api/v1/devices/inventory",
+            collect_mac_inventory(device_name, agent_version),
+            {"Authorization": f"Device {credential}"},
+        )
         request_json(
             f"{api_base_url.rstrip('/')}/api/v1/device/jobs/{job_id}/complete",
-            {"result": {"code": "acknowledged", "message": "Mac development receiver accepted the test job."}},
+            {"result": {"code": "inventory_submitted", "snapshot_id": inventory.get("snapshot_id"), "payload_hash": inventory.get("payload_hash")}},
             {"Authorization": f"Device {credential}"},
         )
         print(f"Acknowledged test job {job_id}")
@@ -123,7 +198,7 @@ def main() -> None:
             heartbeat(args.api_base_url, credential, args.agent_version)
             print(f"Heartbeat accepted at {datetime.now().astimezone().isoformat(timespec='seconds')}")
             if args.jobs:
-                process_test_job(args.api_base_url, credential)
+                process_test_job(args.api_base_url, credential, args.device_name, args.agent_version)
             retry_delay = 15
             if not args.watch:
                 break

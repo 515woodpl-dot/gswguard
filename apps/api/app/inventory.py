@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
@@ -67,11 +67,12 @@ class InstalledSoftware(InventoryModel):
 
 
 class InventorySnapshot(InventoryModel):
+    platform: str = Field(default="windows", pattern="^(windows|macos|ios|ipados|android|linux|unknown)$")
     device_name: str = Field(min_length=1, max_length=160)
     manufacturer: str = Field(min_length=1, max_length=160)
     model: str = Field(min_length=1, max_length=160)
     serial_number: str = Field(min_length=1, max_length=160)
-    windows: WindowsInfo
+    windows: WindowsInfo | None = None
     cpu: CpuInfo
     installed_ram_bytes: int = Field(ge=0)
     storage: list[StorageDevice] = Field(max_length=32)
@@ -82,6 +83,11 @@ class InventorySnapshot(InventoryModel):
     agent_version: str = Field(min_length=1, max_length=40)
     startup_time: datetime | None = None
     last_heartbeat: datetime | None = None
+
+
+class InventorySubmission(BaseModel):
+    snapshot: InventorySnapshot
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class SoftwareChangeType(StrEnum):
@@ -128,3 +134,60 @@ def software_changes(
                 )
             )
     return changes
+
+
+class InventoryRepository:
+    def __init__(self, database_url: str):
+        self.database_url = database_url
+
+    def submit(self, credential: str, submission: InventorySubmission) -> dict[str, Any]:
+        import psycopg
+        from psycopg.types.json import Jsonb
+
+        from .audit import AuditOutcome, append_audit_in_transaction
+        from .enrollment import hash_secret
+
+        snapshot = submission.snapshot
+        payload = canonical_inventory(snapshot)
+        payload_hash = inventory_hash(snapshot)
+        with psycopg.connect(self.database_url) as connection:
+            with connection.transaction():
+                device = connection.execute(
+                    """
+                    select id, organization_id, status::text
+                    from public.devices
+                    where credential_hash = %s
+                    """,
+                    (hash_secret(credential),),
+                ).fetchone()
+                if device is None or device[2] == "revoked":
+                    raise ValueError("invalid_device_credential")
+                device_id, organization_id, _status = device
+                row = connection.execute(
+                    """
+                    insert into public.inventory_snapshots
+                      (organization_id, device_id, captured_at, payload_hash, payload)
+                    values (%s, %s, %s, %s, %s)
+                    on conflict (device_id, payload_hash) do nothing
+                    returning id
+                    """,
+                    (organization_id, device_id, submission.captured_at, payload_hash, Jsonb(payload)),
+                ).fetchone()
+                append_audit_in_transaction(
+                    connection,
+                    organization_id=organization_id,
+                    actor_type="device",
+                    actor_id=device_id,
+                    action="inventory.updated",
+                    outcome=AuditOutcome.succeeded,
+                    target_type="device",
+                    target_id=device_id,
+                    metadata={"payload_hash": payload_hash, "deduplicated": str(row is None).lower()},
+                )
+                return {
+                    "device_id": device_id,
+                    "snapshot_id": row[0] if row else None,
+                    "payload_hash": payload_hash,
+                    "captured_at": submission.captured_at,
+                    "deduplicated": row is None,
+                }
