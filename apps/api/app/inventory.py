@@ -72,6 +72,7 @@ class InventorySnapshot(InventoryModel):
     manufacturer: str = Field(min_length=1, max_length=160)
     model: str = Field(min_length=1, max_length=160)
     serial_number: str = Field(min_length=1, max_length=160)
+    os_version: str | None = Field(default=None, max_length=80)
     windows: WindowsInfo | None = None
     cpu: CpuInfo
     installed_ram_bytes: int = Field(ge=0)
