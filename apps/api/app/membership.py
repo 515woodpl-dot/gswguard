@@ -8,6 +8,10 @@ from .auth import AppRole
 logger = logging.getLogger(__name__)
 
 
+class MembershipLookupError(Exception):
+    """Raised when membership cannot be resolved due to infrastructure failure."""
+
+
 class MembershipRepository:
     def __init__(self, database_url: str):
         self.database_url = database_url
@@ -25,12 +29,12 @@ class MembershipRepository:
 
             with psycopg.connect(self.database_url, connect_timeout=5) as connection:
                 row = connection.execute(query, (user_id,)).fetchone()
-        except ImportError:
+        except ImportError as exc:
             logger.exception("PostgreSQL driver is not installed")
-            return None
-        except Exception:
+            raise MembershipLookupError("membership driver unavailable") from exc
+        except Exception as exc:
             logger.exception("Unable to resolve organization membership")
-            return None
+            raise MembershipLookupError("membership lookup failed") from exc
         if row is None:
             return None
         role, organization_id = row

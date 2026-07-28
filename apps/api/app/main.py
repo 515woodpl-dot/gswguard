@@ -30,7 +30,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RateLimitMiddleware, trusted_proxy_hops=settings.trusted_proxy_hops)
 app.state.jwt_verifier = JwtVerifier(
     settings.supabase_jwt_secret,
     settings.supabase_jwt_issuer,

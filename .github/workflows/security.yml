@@ -32,8 +32,36 @@ jobs:
       - uses: actions/dependency-review-action@v4
 
   codeql:
-    name: CodeQL (enabled when application code exists)
-    if: ${{ false }}
-    runs-on: ubuntu-latest
+    name: CodeQL
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: python
+            runner: ubuntu-latest
+            experimental: false
+          - language: javascript-typescript
+            runner: ubuntu-latest
+            experimental: false
+          - language: csharp
+            runner: windows-latest
+            experimental: true
     steps:
-      - run: echo "CodeQL languages will be configured with application code."
+      - uses: actions/checkout@v4
+      - if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: github/codeql-action/init@v3
+        with:
+          language: ${{ matrix.language }}
+          build-mode: ${{ matrix.language == 'csharp' && 'manual' || 'autobuild' }}
+      - if: matrix.language != 'csharp'
+        uses: github/codeql-action/autobuild@v3
+      - if: matrix.language == 'csharp'
+        run: dotnet build apps/windows-agent/GSWGuard.Agent.slnx --configuration Release
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

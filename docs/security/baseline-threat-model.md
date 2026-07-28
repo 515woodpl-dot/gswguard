@@ -50,6 +50,8 @@ The dashboard may hide unavailable controls for usability, but the API must reje
 
 Every tenant-owned row carries an organization identifier, including devices, jobs, packages, folders, policies, notifications, audit entries, and timeline records. Services derive scope from authenticated context rather than trusting arbitrary client-supplied organization IDs. RLS policies deny cross-tenant access, and tests cover both direct table access and API paths. Background workers preserve organization scope when processing outbox events.
 
+The dashboard receives the Supabase anon key at runtime; this key is public by design. Direct-to-Postgres tenant isolation therefore rests on Supabase RLS. Every tenant-owned table must have RLS enabled with organization-scoped policies, or an intentional deny-all policy where only server-side functions write. Adding a table without an RLS policy is a release-blocking regression.
+
 ## Enrollment and device identity
 
 Enrollment is a one-time bootstrap exchange over HTTPS. The server stores a hash of a random short-lived token, consumes it atomically, creates a unique device identity and credential, returns the credential only once, and records audit/notification events. Device identity uniqueness, credential status, revocation, enrollment time, and future rotation timestamps are modeled. Enrollment endpoints are rate-limited and reject reused, expired, malformed, or organization-mismatched requests.
@@ -64,7 +66,15 @@ Security-relevant actions emit audit data in the same transaction as the state m
 
 ## Secret handling and CI
 
-`.env` files, service-account keys, signing keys, bootstrap secrets, and device credentials are local/deployment-only. `.env.example` contains names and safe placeholders only. CI pull requests run without production secrets; secret scanning and dependency checks run before merge. Logs are structured and redacted. Rotation and incident response are required before production deployment.
+`.env` files, service-account keys, signing keys, bootstrap secrets, and device credentials are local/deployment-only. `.env.example` contains names and safe placeholders only. CI pull requests run without production secrets; secret scanning, dependency review, and CodeQL run before merge. Logs are structured and redacted. Rotation and incident response are required before production deployment.
+
+## Testing-mode hardening
+
+- API and dashboard containers run as non-root users.
+- Production rejects empty or wildcard credentialed CORS origins.
+- API responses include restrictive JSON/API security headers.
+- The in-process limiter is only a small-instance abuse brake. It ignores `X-Forwarded-For` unless the exact trusted proxy count is configured.
+- Membership infrastructure failures return HTTP 503 rather than silently changing authorization behavior.
 
 ## Deferred phase-specific threat models
 

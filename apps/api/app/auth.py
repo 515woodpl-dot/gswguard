@@ -88,7 +88,16 @@ def current_user(request: Request, token: Annotated[str, Depends(bearer_token)])
     user = verifier.verify(token)
     repository = getattr(request.app.state, "membership_repository", None)
     if repository is not None:
-        membership = repository.resolve(user.user_id)
+        from .membership import MembershipLookupError
+
+        try:
+            membership = repository.resolve(user.user_id)
+        except MembershipLookupError as exc:
+            logger.warning("Membership lookup unavailable: %s", type(exc).__name__)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authorization backend unavailable",
+            ) from exc
         if membership is None:
             # Once the database-backed membership boundary is configured, JWT
             # role and organization claims are not sufficient authorization.

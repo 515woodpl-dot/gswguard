@@ -13,6 +13,7 @@ class Settings(BaseModel):
     supabase_jwt_jwks_url: str | None = None
     supabase_jwt_audience: str = Field(default="authenticated", min_length=1)
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"])
+    trusted_proxy_hops: int = Field(default=0, ge=0, le=8)
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -35,6 +36,7 @@ class Settings(BaseModel):
                 ).split(",")
                 if origin.strip()
             ],
+            trusted_proxy_hops=int(getenv("TRUSTED_PROXY_HOPS", "0") or "0"),
         )
 
     def validate_for_production(self) -> None:
@@ -47,3 +49,7 @@ class Settings(BaseModel):
             missing.append("SUPABASE_JWT_ISSUER")
         if missing:
             raise ValueError(f"Missing production configuration: {', '.join(missing)}")
+        if not self.cors_origins:
+            raise ValueError("CORS_ORIGINS must list explicit origins in production")
+        if "*" in self.cors_origins:
+            raise ValueError("CORS_ORIGINS may not contain '*' in production")
