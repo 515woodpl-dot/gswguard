@@ -47,9 +47,14 @@ h1 { max-width: 720px; margin: 1rem 0; font-size: clamp(2.5rem, 7vw, 5.6rem); li
 .device-actions { display: flex; align-items: center; gap: .75rem; }
 .device-actions button { padding: .55rem .75rem; border: 0; border-radius: .55rem; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
 .device-actions button:disabled { cursor: wait; opacity: .55; }
+.device-actions .secondary-button, .token-copy { background: transparent; color: var(--ink); border: 1px solid var(--line); }
 .token-result { display: grid; gap: .5rem; margin-top: 1rem; padding: .8rem; border-radius: .6rem; background: #fff7ed; color: #8b481f; }
 .token-result code { overflow-wrap: anywhere; font-size: .8rem; }
+.token-copy { justify-self: start; }
 .empty-state { color: var(--muted); }
+.device-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-top: 1rem; color: var(--muted); font-size: .8rem; }
+.device-toolbar label { display: grid; gap: .35rem; }
+.device-toolbar select { padding: .45rem .6rem; border: 1px solid var(--line); border-radius: .45rem; background: #fff; color: var(--ink); }
 .device-list { margin-top: 1rem; border-top: 1px solid var(--line); }
 .device-row { padding: .9rem 0; border-bottom: 1px solid var(--line); }
 .device-status { padding: .25rem .5rem; border-radius: 999px; background: #f1f1ef; color: var(--muted); font-size: .75rem; font-weight: 700; text-transform: capitalize; }

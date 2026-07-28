@@ -1,1 +1,1 @@
-"""GSWGuard applications namespace."""
+"""YorGuard applications namespace."""

@@ -1,7 +1,7 @@
 'use client';
 
 import { createClient, type Session } from '@supabase/supabase-js';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 
 type RuntimeConfig = {
@@ -35,6 +35,9 @@ export function AuthPanel() {
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
   const [devicesLoaded, setDevicesLoaded] = useState(false);
+  const [refreshBusy, setRefreshBusy] = useState(false);
+  const [platformFilter, setPlatformFilter] = useState('all');
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [enrollmentToken, setEnrollmentToken] = useState<string | null>(null);
   const [enrollmentTokenExpires, setEnrollmentTokenExpires] = useState<string | null>(null);
@@ -97,9 +100,12 @@ export function AuthPanel() {
       });
   }, [config, session]);
 
-  useEffect(() => {
+  const loadDevices = useCallback(async (showBusy = false) => {
     if (!config || !session || !apiUser) return;
-    void fetch(`${config.apiBaseUrl}/api/v1/devices`, {
+    if (showBusy) setRefreshBusy(true);
+    setDeviceError(null);
+    setDevicesLoaded(false);
+    await fetch(`${config.apiBaseUrl}/api/v1/devices`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
       .then(async (response) => {
@@ -108,8 +114,17 @@ export function AuthPanel() {
       })
       .then(setDevices)
       .catch((error: unknown) => setDeviceError(error instanceof Error ? error.message : 'Unable to load devices'))
-      .finally(() => setDevicesLoaded(true));
+      .finally(() => {
+        setDevicesLoaded(true);
+        setRefreshBusy(false);
+      });
   }, [apiUser, config, session]);
+
+  useEffect(() => {
+    // Inventory is an external API resource; load it when the verified session changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadDevices();
+  }, [loadDevices]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -168,10 +183,23 @@ export function AuthPanel() {
     }
   }
 
+  async function copyEnrollmentToken() {
+    if (!enrollmentToken) return;
+    try {
+      await navigator.clipboard.writeText(enrollmentToken);
+      setCopyMessage('Token copied');
+      window.setTimeout(() => setCopyMessage(null), 2000);
+    } catch {
+      setCopyMessage('Copy unavailable — select the token manually');
+    }
+  }
+
   if (session && apiUser) {
     const onlineCount = devices.filter((device) => device.status === 'online').length;
     const attentionCount = devices.filter((device) => device.status !== 'online').length;
     const platformCount = new Set(devices.map((device) => device.platform)).size;
+    const platforms = Array.from(new Set(devices.map((device) => device.platform))).sort();
+    const visibleDevices = platformFilter === 'all' ? devices : devices.filter((device) => device.platform === platformFilter);
     return (
       <>
         <div className="workspace-header">
@@ -210,6 +238,9 @@ export function AuthPanel() {
             </div>
             <div className="device-actions">
               <span className="device-count">{devices.filter((device) => device.status === 'online').length} online</span>
+              <button type="button" className="secondary-button" onClick={() => void loadDevices(true)} disabled={refreshBusy}>
+                {refreshBusy ? 'Refreshing…' : 'Refresh'}
+              </button>
               {apiUser.role === 'owner' || apiUser.role === 'administrator' ? (
                 <button type="button" onClick={createEnrollmentToken} disabled={tokenBusy}>
                   {tokenBusy ? 'Creating…' : 'Create enrollment token'}
@@ -223,13 +254,27 @@ export function AuthPanel() {
               <strong>Copy this one-time token to the endpoint installer:</strong>
               <code>{enrollmentToken}</code>
               {enrollmentTokenExpires ? <span>Expires {enrollmentTokenExpires}</span> : null}
+              <button type="button" className="secondary-button token-copy" onClick={() => void copyEnrollmentToken()}>
+                {copyMessage ?? 'Copy token'}
+              </button>
             </div>
           ) : null}
           {!devicesLoaded ? <p className="empty-state">Loading device inventory…</p> : null}
           {devicesLoaded && devices.length === 0 && !deviceError ? <p className="empty-state">No devices enrolled yet. Create an enrollment token to add the first endpoint.</p> : null}
           {devices.length > 0 ? (
+            <>
+              <div className="device-toolbar">
+                <label>
+                  Platform
+                  <select value={platformFilter} onChange={(event) => setPlatformFilter(event.target.value)}>
+                    <option value="all">All platforms</option>
+                    {platforms.map((platform) => <option key={platform} value={platform}>{platform}</option>)}
+                  </select>
+                </label>
+                <span>{visibleDevices.length} shown</span>
+              </div>
             <div className="device-list">
-              {devices.map((device) => (
+              {visibleDevices.map((device) => (
                 <div className="device-row" key={device.id}>
                   <div>
                     <strong>{device.device_name}</strong>
@@ -239,6 +284,7 @@ export function AuthPanel() {
                 </div>
               ))}
             </div>
+            </>
           ) : null}
         </section>
       </>
