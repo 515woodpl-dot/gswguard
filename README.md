@@ -4,7 +4,7 @@ YorGuard is a lightweight endpoint-management platform. The initial target is tw
 
 ## Project status
 
-Phase 1B is complete: minimal dashboard, API, and Windows-agent skeletons are implemented. The database schema, authentication, enrollment, and device-management features are not implemented yet.
+The current prototype has a deployed Supabase-backed authentication and device-enrollment path, cross-platform receiver helpers, and a working Raspberry Pi dashboard. Several domain modules remain test-backed foundations rather than complete product workflows. See the [implementation audit](docs/audit-2026-07-28.md).
 
 ## Planned layout
 
@@ -29,7 +29,7 @@ Application-specific commands will be added only when each application exists. W
 
 ## Development sequence
 
-The approved order is Phase 1A → Phase 1C contract proof of concept → Phase 1B application skeletons. Each phase stops for owner review before the next begins. See [the implementation plan](docs/implementation-plan.md).
+The original phased order was Phase 1A → Phase 1C contract proof of concept → Phase 1B application skeletons. The implementation is now in integration and hardening work; each new bounded execution still requires explicit acceptance criteria and validation. See [the implementation plan](docs/implementation-plan.md) and the [implementation audit](docs/audit-2026-07-28.md).
 
 ## Security and governance
 

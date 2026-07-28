@@ -77,7 +77,21 @@ async def live() -> HealthResponse:
 @app.get("/health/ready", response_model=HealthResponse, tags=["health"])
 @app.get("/api/v1/health/ready", response_model=HealthResponse, tags=["health"])
 async def ready() -> HealthResponse:
-    return health_response()
+    response = health_response()
+    if settings.database_url:
+        try:
+            import psycopg
+
+            with psycopg.connect(settings.database_url, connect_timeout=3) as connection:
+                connection.execute("select 1")
+        except Exception:
+            # Keep provider and connection details out of the response and logs.
+            response.status = HealthStatus.degraded
+            response.detail = "database unavailable"
+            return JSONResponse(status_code=503, content=response.model_dump(mode="json"))
+    else:
+        response.detail = "database check skipped in development"
+    return response
 
 
 @app.get("/api/v1/auth/me", response_model=AuthenticatedUser, tags=["auth"])
