@@ -1,0 +1,31 @@
+name: Windows agent release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish self-contained agent
+        shell: pwsh
+        run: |
+          dotnet publish apps/windows-agent/GSWGuard.Agent/GSWGuard.Agent.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -o publish
+          Copy-Item scripts/update-windows-agent.ps1 publish/update-windows-agent.ps1
+          Set-Content publish/version.txt "${env:GITHUB_REF_NAME}" -NoNewline
+          Compress-Archive -Path publish/* -DestinationPath yorguard-windows-agent.zip
+      - name: Publish GitHub release
+        shell: bash
+        run: gh release create "${GITHUB_REF_NAME}" yorguard-windows-agent.zip publish/version.txt --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

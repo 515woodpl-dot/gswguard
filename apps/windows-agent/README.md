@@ -2,7 +2,7 @@
 
 This is a small Windows Service. It enrolls with a one-time token, stores the device credential with Windows DPAPI, then automatically sends a heartbeat and inventory snapshot every five minutes. It collects approved metadata only: OS/build, hardware, disks, network adapters, local account names, and installed software names/versions. It does not collect browser history, document contents, or user files.
 
-From an elevated PowerShell prompt on the Windows computer:
+From an elevated PowerShell prompt on the Windows computer, copy only `scripts/install-windows-agent.ps1` and run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
@@ -11,7 +11,7 @@ Set-ExecutionPolicy -Scope Process Bypass
   -EnrollmentToken "paste-the-one-time-token-here"
 ```
 
-The token is consumed during enrollment. The protected device credential is stored under `C:\ProgramData\YorGuard`.
+The installer downloads the current self-contained Windows package, registers the service, and creates a six-hour scheduled updater. Future tagged releases are downloaded and installed automatically; `appsettings.json` and the protected device credential are preserved. The token is consumed during enrollment and the protected device credential is stored under `C:\ProgramData\YorGuard`.
 
 Useful service commands:
 
