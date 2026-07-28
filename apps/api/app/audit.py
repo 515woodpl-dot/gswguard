@@ -37,6 +37,8 @@ def append_audit_in_transaction(
     event_id = uuid4()
     created_at = datetime.now(UTC)
     audit_metadata = metadata or {}
+    actor_user_id = actor_id if actor_type == "user" else None
+    actor_device_id = actor_id if actor_type == "device" else None
     # Serialize hash-chain appends per organization. Without a transaction
     # lock, two first writers could both observe GENESIS and fork the chain.
     connection.execute("select pg_advisory_xact_lock(hashtext(%s))", (str(organization_id),))
@@ -54,7 +56,8 @@ def append_audit_in_transaction(
     payload = {
         "id": str(event_id),
         "organization_id": str(organization_id),
-        "actor_user_id": str(actor_id) if actor_id else None,
+        "actor_user_id": str(actor_user_id) if actor_user_id else None,
+        "actor_device_id": str(actor_device_id) if actor_device_id else None,
         "actor_type": actor_type,
         "action": action,
         "target_type": target_type,
@@ -71,14 +74,15 @@ def append_audit_in_transaction(
     connection.execute(
         """
         insert into public.audit_log
-          (id, organization_id, actor_user_id, actor_type, action, target_type, target_id,
+          (id, organization_id, actor_user_id, actor_device_id, actor_type, action, target_type, target_id,
            correlation_id, outcome, reason, metadata, created_at, previous_hash, event_hash)
-        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             event_id,
             organization_id,
-            actor_id,
+            actor_user_id,
+            actor_device_id,
             actor_type,
             action,
             target_type,
