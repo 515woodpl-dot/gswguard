@@ -33,3 +33,34 @@ def test_auth_verifies_supabase_style_hs256_claims(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json()["user_id"] == str(user_id)
     assert response.json()["role"] == "viewer"
+
+
+def test_database_membership_boundary_does_not_fall_back_to_jwt_role(monkeypatch) -> None:
+    secret = "membership-boundary-secret"
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", secret)
+    app.state.jwt_verifier.secret = secret
+    user_id = uuid4()
+    token = jwt.encode(
+        {
+            "sub": str(user_id),
+            "aud": "authenticated",
+            "role": "owner",
+            "organization_id": str(uuid4()),
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+        },
+        secret,
+        algorithm="HS256",
+    )
+
+    class MissingMembership:
+        def resolve(self, _user_id):
+            return None
+
+    previous = app.state.membership_repository
+    app.state.membership_repository = MissingMembership()
+    try:
+        response = TestClient(app).get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    finally:
+        app.state.membership_repository = previous
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Organization membership required"

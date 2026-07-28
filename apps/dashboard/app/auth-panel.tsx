@@ -202,17 +202,17 @@ export function AuthPanel() {
     const visibleDevices = platformFilter === 'all' ? devices : devices.filter((device) => device.platform === platformFilter);
     return (
       <>
-        <div className="workspace-header">
+        <div className="workspace-header" id="overview">
           <div>
             <p className="eyebrow">YorGuard control center</p>
             <h2>Fleet overview</h2>
             <p>Monitor endpoint health, enrollment, and platform coverage from one workspace.</p>
           </div>
           <nav className="workspace-nav" aria-label="Dashboard sections">
-            <span className="active">Overview</span>
-            <span>Devices</span>
-            <span>Activity</span>
-            <span>Policies</span>
+            <a className="active" href="#overview">Overview</a>
+            <a href="#devices">Devices</a>
+            <span aria-disabled="true" title="Activity view is not enabled yet">Activity</span>
+            <span aria-disabled="true" title="Policy view is not enabled yet">Policies</span>
           </nav>
         </div>
         <div className="auth-panel session-panel" role="status">
@@ -230,7 +230,7 @@ export function AuthPanel() {
           <div className="metric-card metric-attention"><span>Needs attention</span><strong>{attentionCount}</strong><small>Offline or revoked</small></div>
           <div className="metric-card"><span>Platforms</span><strong>{platformCount}</strong><small>Across the fleet</small></div>
         </div>
-        <section className="device-panel" aria-labelledby="device-heading">
+        <section className="device-panel" id="devices" aria-labelledby="device-heading">
           <div className="device-panel-heading">
             <div>
               <strong id="device-heading">Devices</strong>

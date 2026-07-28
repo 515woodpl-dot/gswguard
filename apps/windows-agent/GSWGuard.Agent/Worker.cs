@@ -16,26 +16,54 @@ public sealed class Worker(
             agentOptions.Version,
             agentOptions.Environment);
 
-        if (string.IsNullOrWhiteSpace(agentOptions.ApiBaseUrl) || string.IsNullOrWhiteSpace(agentOptions.EnrollmentToken))
+        if (string.IsNullOrWhiteSpace(agentOptions.ApiBaseUrl))
         {
-            logger.LogInformation("Enrollment receiver is idle: Agent:ApiBaseUrl and Agent:EnrollmentToken are required.");
+            logger.LogInformation("Enrollment receiver is idle: Agent:ApiBaseUrl is required.");
             await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
             return;
         }
 
         var credential = credentialStore.Load();
-        if (string.IsNullOrWhiteSpace(credential))
-        {
-            var enrollment = await apiClient.EnrollAsync(agentOptions, stoppingToken);
-            credentialStore.Save(enrollment.DeviceCredential);
-            credential = enrollment.DeviceCredential;
-            logger.LogInformation("YorGuard device enrolled as {DeviceId}.", enrollment.DeviceId);
-        }
-
+        var retryDelay = TimeSpan.FromSeconds(15);
         while (!stoppingToken.IsCancellationRequested)
         {
-            await apiClient.SendHeartbeatAsync(credential, agentOptions.Version, stoppingToken);
-            await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+            try
+            {
+                if (string.IsNullOrWhiteSpace(credential))
+                {
+                    if (string.IsNullOrWhiteSpace(agentOptions.EnrollmentToken))
+                    {
+                        logger.LogWarning("No device credential or enrollment token is configured; retrying later.");
+                        await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+                        continue;
+                    }
+                    var enrollment = await apiClient.EnrollAsync(agentOptions, stoppingToken);
+                    credentialStore.Save(enrollment.DeviceCredential);
+                    credential = enrollment.DeviceCredential;
+                    logger.LogInformation("YorGuard device enrolled as {DeviceId}.", enrollment.DeviceId);
+                }
+
+                await apiClient.SendHeartbeatAsync(credential, agentOptions.Version, stoppingToken);
+                retryDelay = TimeSpan.FromSeconds(15);
+                await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (HttpRequestException exception)
+            {
+                logger.LogWarning(exception, "YorGuard API unavailable; retrying in {Delay}.", retryDelay);
+                await Task.Delay(retryDelay, stoppingToken);
+                retryDelay = TimeSpan.FromSeconds(Math.Min(retryDelay.TotalSeconds * 2, 300));
+            }
+            catch (Exception exception)
+            {
+                logger.LogError(exception, "YorGuard receiver cycle failed; retrying in {Delay}.", retryDelay);
+                credential = null;
+                await Task.Delay(retryDelay, stoppingToken);
+                retryDelay = TimeSpan.FromSeconds(Math.Min(retryDelay.TotalSeconds * 2, 300));
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ Validation runs on `windows-latest` because the current development host has no 
 ```text
 dotnet build GSWGuard.Agent.slnx
 dotnet test GSWGuard.Agent.slnx
+```
 
 Configure the receiver with environment variables before starting the agent:
 
@@ -25,6 +26,4 @@ python3 scripts/yorguard-receiver.py --watch 300
 ```
 
 It prompts privately for a token once, stores the device credential in macOS Keychain, and sends a heartbeat every five minutes.
-```
-
-The worker intentionally performs no device management, does not store credentials, does not execute commands, and does not claim production readiness.
+The worker intentionally performs no device management or command execution and does not claim production readiness.

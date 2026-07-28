@@ -39,7 +39,7 @@ class JwtVerifier:
         self.jwks_client = jwt.PyJWKClient(jwks_url) if jwks_url else None
 
     def verify(self, token: str) -> AuthenticatedUser:
-        if not self.secret:
+        if not self.secret and self.jwks_client is None:
             raise HTTPException(status_code=503, detail="Authentication is not configured")
         options = {"require": ["exp", "sub"]}
         try:
@@ -89,9 +89,12 @@ def current_user(request: Request, token: Annotated[str, Depends(bearer_token)])
     repository = getattr(request.app.state, "membership_repository", None)
     if repository is not None:
         membership = repository.resolve(user.user_id)
-        if membership is not None:
-            role, organization_id = membership
-            user = user.model_copy(update={"role": role, "organization_id": organization_id})
+        if membership is None:
+            # Once the database-backed membership boundary is configured, JWT
+            # role and organization claims are not sufficient authorization.
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization membership required")
+        role, organization_id = membership
+        user = user.model_copy(update={"role": role, "organization_id": organization_id})
     return user
 
 

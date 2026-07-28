@@ -1,6 +1,6 @@
 # YorGuard API
 
-Minimal FastAPI skeleton. It exposes `/health/live`, `/health/ready`, and versioned equivalents under `/api/v1/`. Business modules and database integrations begin in later phases.
+The FastAPI service exposes health, authenticated membership, enrollment, heartbeat, and device-inventory routes. Inventory, jobs, compliance, package, file-operation, notification, and audit modules currently remain test-backed integration work.
 
 From the repository root, after installing the API requirements:
 
@@ -9,4 +9,4 @@ python3 -m pip install -r apps/api/requirements.txt
 uvicorn app.main:app --app-dir apps/api --reload
 ```
 
-The API imports the Phase 1C contract source and returns structured health responses. The global exception handler returns sanitized error envelopes and never exposes exception details.
+The API imports the shared contract source and returns structured health responses. Readiness checks the configured database. The global exception handler returns sanitized error envelopes and never exposes exception details.

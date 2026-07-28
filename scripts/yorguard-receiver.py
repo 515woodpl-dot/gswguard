@@ -8,6 +8,7 @@ import getpass
 import json
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
@@ -89,12 +90,21 @@ def main() -> None:
         keychain_write(account, credential)
         print(f"Enrolled device {enrollment['device_id']}; credential stored in macOS Keychain.")
 
+    retry_delay = 15
     while True:
-        heartbeat(args.api_base_url, credential, args.agent_version)
-        print(f"Heartbeat accepted at {datetime.now().astimezone().isoformat(timespec='seconds')}")
-        if not args.watch:
-            break
-        time.sleep(args.watch)
+        try:
+            heartbeat(args.api_base_url, credential, args.agent_version)
+            print(f"Heartbeat accepted at {datetime.now().astimezone().isoformat(timespec='seconds')}")
+            retry_delay = 15
+            if not args.watch:
+                break
+            time.sleep(args.watch)
+        except (RuntimeError, OSError) as error:
+            if not args.watch:
+                raise
+            print(f"YorGuard heartbeat failed: {error}; retrying in {retry_delay}s", file=sys.stderr)
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 300)
 
 
 if __name__ == "__main__":

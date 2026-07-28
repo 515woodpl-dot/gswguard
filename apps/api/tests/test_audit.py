@@ -29,5 +29,8 @@ def test_audit_exports_are_nonempty_csv_xlsx_and_pdf():
     assert b"action" in export_csv(selected)
     workbook = export_xlsx(selected)
     with zipfile.ZipFile(BytesIO(workbook)) as archive:
+        assert "_rels/.rels" in archive.namelist()
+        assert "xl/workbook.xml" in archive.namelist()
+        assert "xl/_rels/workbook.xml.rels" in archive.namelist()
         assert "xl/worksheets/sheet1.xml" in archive.namelist()
     assert export_pdf(selected).startswith(b"%PDF")
