@@ -1,11 +1,11 @@
-[<comment-based help>
+<#
 .SYNOPSIS
 Installs and starts the YorGuard Windows endpoint agent.
 
 .EXAMPLE
 Set-ExecutionPolicy -Scope Process Bypass
 .\install-windows-agent.ps1 `
-  -ApiBaseUrl "http://100.127.37.0:8000" `
+  -ApiBaseUrl "https://gsw.tail8a6b99.ts.net:8443" `
   -EnrollmentToken "PASTE_THIS_COMPUTER_S_ONE_TIME_TOKEN_HERE"
 
 Run PowerShell as Administrator. Create the one-time token in the YorGuard
@@ -14,7 +14,7 @@ dashboard immediately before installation. Do not save the real token in Git.
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)] [string]$ApiBaseUrl,
+    [string]$ApiBaseUrl = "https://gsw.tail8a6b99.ts.net:8443",
     [Parameter(Mandatory = $true)] [string]$EnrollmentToken,
     [string]$InstallDirectory = "$env:ProgramFiles\YorGuard\Agent",
     [string]$ServiceName = "YorGuardAgent",

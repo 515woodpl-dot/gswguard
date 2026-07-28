@@ -18,6 +18,7 @@ from urllib.request import Request, urlopen
 
 
 KEYCHAIN_SERVICE = "YorGuard Device Credential"
+DEFAULT_API_BASE_URL = "https://gsw.tail8a6b99.ts.net:8443"
 
 
 def request_json(url: str, payload: dict, headers: dict[str, str] | None = None) -> dict:
@@ -168,7 +169,7 @@ def submit_inventory(api_base_url: str, credential: str, device_name: str, agent
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="YorGuard macOS development receiver")
-    parser.add_argument("--api-base-url", default=os.getenv("YORGUARD_API_BASE_URL", "http://100.127.37.0:8000"))
+    parser.add_argument("--api-base-url", default=os.getenv("YORGUARD_API_BASE_URL", DEFAULT_API_BASE_URL))
     parser.add_argument("--device-name", default=os.uname().nodename)
     parser.add_argument("--agent-version", default="0.1.0")
     parser.add_argument("--watch", type=int, metavar="SECONDS", help="send heartbeats repeatedly")
