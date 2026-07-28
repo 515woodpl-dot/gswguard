@@ -12,7 +12,7 @@ as release evidence.
 | 0A | Verified documentation | Architecture plan and trust-boundary documents exist | Keep ADRs current when a deferred decision is made |
 | 0B | Verified foundation | Security policy and baseline threat model exist | Production signing/update trust still unresolved |
 | 1A | Evidence incomplete | CI/tooling exists, but there is no dedicated Phase 1A completion report | Verify CI jobs after release changes |
-| 1B | Partially verified | Dashboard production build passes; API tests pass | Windows agent C# build currently fails with two compiler errors |
+| 1B | Partially verified | Dashboard production build passes; API tests pass; Windows agent builds with .NET 10.0.302 and its test passes | Real Windows Service install/runtime test |
 | 1C | Partially verified | Contract/documentation checks pass | Re-run C# contract validation after Windows build is repaired |
 | 2 | Partially verified | Supabase-backed sign-in/API membership works in the Pi test environment | Full migration/pgTAP execution and backup/restore evidence |
 | 3 | Partially verified | Real Mac enrollment and heartbeat accepted by the Pi API | Real Windows enrollment; credential rotation; HTTPS rollout |
@@ -38,10 +38,8 @@ Directly verified on 2026-07-28:
   versions, and an unconfigured public-key placeholder.
 - The patch's Python suite passes: 39 tests.
 - The patch's PowerShell scripts parse successfully.
-- The Windows agent currently fails to compile:
-  - `AgentOptions.DeviceName` resolves `Environment` to the instance property.
-  - `DeviceCredentialStore` mixes `DirectorySecurity` and `FileSecurity` in a
-    conditional expression.
+- The Windows agent was repaired and verified locally with .NET 10.0.302:
+  `dotnet build` completed with 0 errors and the test suite passed (1 test).
 
 Security-patch corrections required before application:
 

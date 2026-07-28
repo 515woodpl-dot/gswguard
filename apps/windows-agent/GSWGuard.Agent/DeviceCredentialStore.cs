@@ -34,9 +34,23 @@ public sealed class DeviceCredentialStore
 
     private static void RestrictToServiceAccounts(string target, bool isDirectory)
     {
-        var security = isDirectory
-            ? new DirectoryInfo(target).GetAccessControl()
-            : new FileInfo(target).GetAccessControl();
+        if (isDirectory)
+        {
+            var directory = new DirectoryInfo(target);
+            var security = directory.GetAccessControl();
+            ApplyServiceAccountAccess(security);
+            directory.SetAccessControl(security);
+            return;
+        }
+
+        var file = new FileInfo(target);
+        var fileSecurity = file.GetAccessControl();
+        ApplyServiceAccountAccess(fileSecurity);
+        file.SetAccessControl(fileSecurity);
+    }
+
+    private static void ApplyServiceAccountAccess(FileSystemSecurity security)
+    {
         security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         security.SetAccessRule(new FileSystemAccessRule(
             new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
@@ -50,9 +64,5 @@ public sealed class DeviceCredentialStore
             InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit,
             PropagationFlags.None,
             AccessControlType.Allow));
-        if (isDirectory)
-            new DirectoryInfo(target).SetAccessControl((DirectorySecurity)security);
-        else
-            new FileInfo(target).SetAccessControl((FileSecurity)security);
     }
 }
