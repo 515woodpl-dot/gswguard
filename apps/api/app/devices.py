@@ -155,7 +155,22 @@ class DeviceRepository:
                 """,
                 (organization_id,),
             ).fetchall()
-        return [DeviceSummary(*row) for row in rows]
+        return [
+            DeviceSummary(
+                id=row[0],
+                device_name=row[1],
+                manufacturer=row[2],
+                model=row[3],
+                serial_number=row[4],
+                agent_version=row[5],
+                platform=row[6],
+                os_version=row[7],
+                status=row[8],
+                enrolled_at=row[9],
+                last_heartbeat_at=row[10],
+            )
+            for row in rows
+        ]
 
 
 def device_credential(authorization: str) -> str:
