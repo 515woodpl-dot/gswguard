@@ -12,7 +12,11 @@ from .enrollment import EnrollmentError, EnrollmentResult, Heartbeat, HeartbeatR
 
 class EnrollmentTokenRequest(BaseModel):
     label: str | None = Field(default=None, max_length=120)
-    ttl_minutes: int = Field(default=60, ge=5, le=1440)
+    # The token authorizes device enrollment and is embedded in a downloadable
+    # bootstrap file, so the window is kept short: long enough to download and
+    # run the installer, not long enough to linger for hours in a downloads
+    # folder. Default 15 minutes, hard cap 60.
+    ttl_minutes: int = Field(default=15, ge=5, le=60)
 
 
 class DeviceEnrollmentRequest(BaseModel):

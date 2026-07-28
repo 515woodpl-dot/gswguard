@@ -7,6 +7,7 @@ public sealed class Worker(
     IOptions<AgentOptions> options,
     YorGuardApiClient apiClient,
     DeviceCredentialStore credentialStore,
+    EnrollmentTokenStore enrollmentTokenStore,
     WindowsInventoryCollector inventoryCollector) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -40,6 +41,7 @@ public sealed class Worker(
                     }
                     var enrollment = await apiClient.EnrollAsync(agentOptions, stoppingToken);
                     credentialStore.Save(enrollment.DeviceCredential);
+                    enrollmentTokenStore.Clear();
                     credential = enrollment.DeviceCredential;
                     logger.LogInformation("YorGuard device enrolled as {DeviceId}.", enrollment.DeviceId);
                 }

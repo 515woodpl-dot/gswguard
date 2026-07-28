@@ -14,6 +14,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
@@ -174,7 +175,26 @@ def main() -> None:
     parser.add_argument("--agent-version", default="0.1.0")
     parser.add_argument("--watch", type=int, metavar="SECONDS", help="send heartbeats repeatedly")
     parser.add_argument("--jobs", action="store_true", help="claim and acknowledge safe development jobs")
+    parser.add_argument(
+        "--allow-insecure-http",
+        action="store_true",
+        default=os.getenv("YORGUARD_ALLOW_INSECURE_HTTP") == "1",
+        help="permit a plaintext http:// API URL (only on a trusted network such as a tailnet)",
+    )
     args = parser.parse_args()
+
+    # The device credential and inventory ride this transport. Require TLS unless
+    # the URL is loopback or the operator explicitly opts into plaintext for a
+    # trusted network. This closes the sniff/MITM window that would otherwise
+    # feed the update-trust path.
+    parsed = urlparse(args.api_base_url)
+    is_loopback = parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+    if parsed.scheme != "https" and not is_loopback and not args.allow_insecure_http:
+        raise SystemExit(
+            f"Refusing plaintext transport for {args.api_base_url!r}. Use https:// or, on a "
+            "trusted network, pass --allow-insecure-http (or set YORGUARD_ALLOW_INSECURE_HTTP=1)."
+        )
+
     account = getpass.getuser()
     credential = keychain_read(account)
 

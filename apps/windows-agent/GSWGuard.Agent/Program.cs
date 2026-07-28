@@ -18,6 +18,7 @@ builder.Services.AddHttpClient<YorGuardApiClient>((serviceProvider, client) =>
     client.Timeout = TimeSpan.FromSeconds(20);
 });
 builder.Services.AddSingleton<DeviceCredentialStore>();
+builder.Services.AddSingleton<EnrollmentTokenStore>();
 builder.Services.AddSingleton<WindowsInventoryCollector>();
 builder.Services.AddWindowsService(options => options.ServiceName = "YorGuard Agent");
 builder.Services.AddHostedService<Worker>();

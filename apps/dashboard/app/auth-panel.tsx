@@ -8,6 +8,10 @@ type RuntimeConfig = {
   supabaseUrl: string;
   supabaseAnonKey: string;
   apiBaseUrl: string;
+  // Immutable release ref (tag or commit SHA) the Windows bootstrap pins the
+  // installer to. Falls back to a known tag when unset.
+  agentReleaseRef?: string;
+  agentSigningPublicKeyXmlBase64?: string;
 };
 
 type ApiUser = {
@@ -259,8 +263,74 @@ export function AuthPanel() {
 
   function downloadWindowsBootstrap() {
     if (!enrollmentToken || !config) return;
-    const installerUrl = 'https://raw.githubusercontent.com/515woodpl-dot/gswguard/main/scripts/install-windows-agent.ps1';
-    const script = `# YorGuard Windows bootstrap — run PowerShell as Administrator\n$ErrorActionPreference = "Stop"\n$installer = Join-Path $env:TEMP "yorguard-install-windows-agent.ps1"\nInvoke-WebRequest -Uri "${installerUrl}" -OutFile $installer\n& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -ApiBaseUrl "${config.apiBaseUrl}" -EnrollmentToken "${enrollmentToken}"\nRemove-Item $installer -Force -ErrorAction SilentlyContinue\n`;
+    // Pin the bootstrap to an immutable signed release ref, so the fetched
+    // installer is exactly the reviewed release and cannot change underneath an
+    // enrolling machine. The installer verifies the package again before use.
+    const installerRef = config.agentReleaseRef;
+    const signingKey = config.agentSigningPublicKeyXmlBase64;
+    if (!installerRef || !signingKey) {
+      setDeviceError('Signed Windows bootstrap is not configured yet.');
+      return;
+    }
+    const releaseBase = 'https://github.com/515woodpl-dot/gswguard/releases/download/' + installerRef;
+    const packageUrl = releaseBase + '/yorguard-windows-agent.zip';
+    const versionUrl = releaseBase + '/version.txt';
+    const manifestUrl = releaseBase + '/manifest.txt';
+    const signatureUrl = releaseBase + '/manifest.sig';
+    const encode = (value: string) => btoa(value);
+    // The bootstrap embeds a single-use enrollment token, so it deletes both the
+    // downloaded installer and itself after running to avoid leaving the token
+    // in the downloads folder / TEMP.
+    const script = [
+      '# YorGuard Windows bootstrap - run PowerShell as Administrator',
+      '# Contains a single-use enrollment token; it self-deletes after running.',
+      '$ErrorActionPreference = "Stop"',
+      '$releaseRef = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("' + encode(installerRef) + '"))',
+      '$apiBaseUrl = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("' + encode(config.apiBaseUrl) + '"))',
+      '$enrollmentToken = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("' + encode(enrollmentToken) + '"))',
+      '$publicKeyXml = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("' + signingKey + '"))',
+      'if ($apiBaseUrl -notmatch "^https://") { throw "YorGuard API must use HTTPS." }',
+      'if ([string]::IsNullOrWhiteSpace($publicKeyXml)) { throw "YorGuard signing key is not configured." }',
+      '$releaseBase = "https://github.com/515woodpl-dot/gswguard/releases/download/" + $releaseRef',
+      '$packageUrl = "$releaseBase/yorguard-windows-agent.zip"',
+      '$versionUrl = "$releaseBase/version.txt"',
+      '$manifestUrl = "$releaseBase/manifest.txt"',
+      '$signatureUrl = "$releaseBase/manifest.sig"',
+      '$root = Join-Path $env:TEMP ("yorguard-bootstrap-" + [guid]::NewGuid().ToString("N"))',
+      '$package = Join-Path $root "yorguard-windows-agent.zip"',
+      '$manifest = Join-Path $root "manifest.txt"',
+      '$signature = Join-Path $root "manifest.sig"',
+      '$extract = Join-Path $root "extract"',
+      'New-Item -ItemType Directory -Force -Path $root | Out-Null',
+      'try {',
+      '  Invoke-WebRequest -Uri $packageUrl -OutFile $package -UseBasicParsing',
+      '  Invoke-WebRequest -Uri $manifestUrl -OutFile $manifest -UseBasicParsing',
+      '  Invoke-WebRequest -Uri $signatureUrl -OutFile $signature -UseBasicParsing',
+      '  $manifestBytes = [IO.File]::ReadAllBytes($manifest)',
+      '  $signatureBytes = [Convert]::FromBase64String((Get-Content -Raw $signature).Trim())',
+      '  $rsa = New-Object Security.Cryptography.RSACryptoServiceProvider',
+      '  $sha256 = New-Object Security.Cryptography.SHA256Managed',
+      '  try {',
+      '    $rsa.FromXmlString($publicKeyXml)',
+      '    if (-not $rsa.VerifyData($manifestBytes, $sha256, $signatureBytes)) { throw "Package manifest signature is invalid." }',
+      '  } finally { $sha256.Dispose(); $rsa.Dispose() }',
+      '  $fields = @{}',
+      '  foreach ($line in ([Text.Encoding]::ASCII.GetString($manifestBytes) -split "\\r?\\n")) { if ($line -match "^\\s*([^=]+)=(.*)$") { $fields[$matches[1].Trim()] = $matches[2].Trim() } }',
+      '  if ($fields["version"] -ne $releaseRef) { throw "Signed release version does not match the pinned release ref." }',
+      '  if ($fields["file"] -ne "yorguard-windows-agent.zip") { throw "Signed manifest names an unexpected package." }',
+      '  $actualHash = (Get-FileHash $package -Algorithm SHA256).Hash.ToLower()',
+      '  if ($actualHash -ne $fields["sha256"].ToLower()) { throw "Package hash does not match the signed manifest." }',
+      '  Expand-Archive -Path $package -DestinationPath $extract -Force',
+      '  $installer = Join-Path $extract "install-windows-agent.ps1"',
+      '  if (-not (Test-Path $installer)) { throw "Signed package does not contain the installer." }',
+      '  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer -ApiBaseUrl $apiBaseUrl -EnrollmentToken $enrollmentToken -PackageUrl $packageUrl -VersionUrl $versionUrl -ManifestUrl $manifestUrl -SignatureUrl $signatureUrl -PackagePath $package -ManifestPath $manifest -SignaturePath $signature',
+      '  if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { exit $LASTEXITCODE }',
+      '} finally {',
+      '  Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue',
+      '  if ($PSCommandPath) { Remove-Item $PSCommandPath -Force -ErrorAction SilentlyContinue }',
+      '}',
+      '',
+    ].join('\n');
     const blob = new Blob([script], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');

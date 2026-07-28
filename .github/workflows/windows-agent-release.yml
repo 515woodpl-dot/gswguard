@@ -15,17 +15,63 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
       - name: Publish self-contained agent
         shell: pwsh
         run: |
           dotnet publish apps/windows-agent/GSWGuard.Agent/GSWGuard.Agent.csproj `
             -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -o publish
+          Copy-Item scripts/install-windows-agent.ps1 publish/install-windows-agent.ps1
           Copy-Item scripts/update-windows-agent.ps1 publish/update-windows-agent.ps1
+          Copy-Item scripts/YorGuardIntegrity.ps1 publish/YorGuardIntegrity.ps1
           Set-Content publish/version.txt "${env:GITHUB_REF_NAME}" -NoNewline
           Compress-Archive -Path publish/* -DestinationPath yorguard-windows-agent.zip
+
+      # Publish a manifest (version + package hash) and a detached RSA-SHA256
+      # signature over it. Endpoints verify the signature against a pinned public
+      # key, so trust is anchored to the key rather than to the release URL.
+      # Signing is mandatory: a release without the key configured fails here.
+      - name: Create signed integrity manifest
+        shell: pwsh
+        env:
+          RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ([string]::IsNullOrWhiteSpace($env:RELEASE_SIGNING_PRIVATE_KEY)) {
+            throw "RELEASE_SIGNING_PRIVATE_KEY secret is not set. Configure the signing key before tagging a release."
+          }
+
+          $hash = (Get-FileHash yorguard-windows-agent.zip -Algorithm SHA256).Hash.ToLower()
+          $version = "${env:GITHUB_REF_NAME}"
+          $manifest = "version=$version`nsha256=$hash`nfile=yorguard-windows-agent.zip`n"
+          Set-Content -Path manifest.txt -Value $manifest -NoNewline -Encoding ascii
+
+          # Sign with built-in .NET RSA. The secret is a base64 PKCS#8 private key.
+          $manifestBytes = [System.IO.File]::ReadAllBytes("manifest.txt")
+          $privDer = [Convert]::FromBase64String($env:RELEASE_SIGNING_PRIVATE_KEY)
+          $rsa = [System.Security.Cryptography.RSA]::Create()
+          try {
+            $read = 0
+            $rsa.ImportPkcs8PrivateKey($privDer, [ref]$read)
+            $sig = $rsa.SignData(
+              $manifestBytes,
+              [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+              [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+          } finally {
+            $rsa.Dispose()
+          }
+          Set-Content -Path manifest.sig -Value ([Convert]::ToBase64String($sig)) -NoNewline -Encoding ascii
+          Write-Host "Signed manifest for $version (sha256=$hash)"
+
       - name: Publish GitHub release
         shell: bash
-        run: gh release create "${GITHUB_REF_NAME}" yorguard-windows-agent.zip publish/version.txt --generate-notes
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            yorguard-windows-agent.zip \
+            publish/version.txt \
+            manifest.txt \
+            manifest.sig \
+            --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
