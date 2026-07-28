@@ -22,7 +22,7 @@ On first start, the agent consumes the one-time token, stores the device credent
 For macOS development, use the native helper from the repository root:
 
 ```bash
-python3 scripts/yorguard-receiver.py --watch 300
+python3 scripts/yorguard-receiver.py --watch 30 --jobs
 ```
 
 It prompts privately for a token once, stores the device credential in macOS Keychain, and sends a heartbeat every five minutes.

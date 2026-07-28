@@ -29,11 +29,23 @@ type DeviceSummary = {
   last_heartbeat_at: string | null;
 };
 
+type JobSummary = {
+  id: string;
+  device_id: string;
+  action_type: string;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  attempt_count: number;
+  error_code?: string | null;
+};
+
 export function AuthPanel() {
   const [config, setConfig] = useState<RuntimeConfig | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [apiUser, setApiUser] = useState<ApiUser | null>(null);
   const [devices, setDevices] = useState<DeviceSummary[]>([]);
+  const [jobs, setJobs] = useState<JobSummary[]>([]);
   const [devicesLoaded, setDevicesLoaded] = useState(false);
   const [refreshBusy, setRefreshBusy] = useState(false);
   const [platformFilter, setPlatformFilter] = useState('all');
@@ -47,6 +59,9 @@ export function AuthPanel() {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('Loading sign-in…');
   const [busy, setBusy] = useState(false);
+  const [jobBusy, setJobBusy] = useState(false);
+  const [jobError, setJobError] = useState<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
 
   useEffect(() => {
     let active = true;
@@ -126,6 +141,24 @@ export function AuthPanel() {
     void loadDevices();
   }, [loadDevices]);
 
+  const loadJobs = useCallback(async () => {
+    if (!config || !session || !apiUser) return;
+    await fetch(`${config.apiBaseUrl}/api/v1/jobs`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Job history failed (${response.status})`);
+        return (await response.json()) as JobSummary[];
+      })
+      .then(setJobs)
+      .catch((error: unknown) => setJobError(error instanceof Error ? error.message : 'Unable to load jobs'));
+  }, [apiUser, config, session]);
+
+  useEffect(() => {
+    // Job history is an external API resource loaded after authentication.
+    void loadJobs();
+  }, [loadJobs]);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!config) {
@@ -191,6 +224,34 @@ export function AuthPanel() {
       window.setTimeout(() => setCopyMessage(null), 2000);
     } catch {
       setCopyMessage('Copy unavailable — select the token manually');
+    }
+  }
+
+  async function createInventoryJob() {
+    if (!config || !session || !selectedDeviceId) return;
+    setJobBusy(true);
+    setJobError(null);
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/api/v1/jobs`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          device_id: selectedDeviceId,
+          action_type: 'refresh_inventory',
+          idempotency_key: `inventory-${selectedDeviceId}-${Date.now()}`,
+          confirmed: true,
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+      if (!response.ok) throw new Error(body?.detail ?? `Job creation failed (${response.status})`);
+      await loadJobs();
+    } catch (error: unknown) {
+      setJobError(error instanceof Error ? error.message : 'Unable to create job');
+    } finally {
+      setJobBusy(false);
     }
   }
 
@@ -286,6 +347,40 @@ export function AuthPanel() {
             </div>
             </>
           ) : null}
+        </section>
+        <section className="device-panel job-panel" aria-labelledby="job-heading">
+          <div className="device-panel-heading">
+            <div>
+              <strong id="job-heading">Job Center</strong>
+              <p>Safe testing action: request an inventory refresh.</p>
+            </div>
+            <div className="device-actions">
+              <button type="button" className="secondary-button" onClick={() => void loadJobs()}>Refresh jobs</button>
+            </div>
+          </div>
+          <div className="job-create">
+            <label>
+              Test device
+              <select value={selectedDeviceId} onChange={(event) => setSelectedDeviceId(event.target.value)}>
+                <option value="">Choose an enrolled device</option>
+                {devices.map((device) => <option key={device.id} value={device.id}>{device.device_name} · {device.platform}</option>)}
+              </select>
+            </label>
+            <button type="button" onClick={() => void createInventoryJob()} disabled={jobBusy || !selectedDeviceId}>
+              {jobBusy ? 'Submitting…' : 'Request inventory refresh'}
+            </button>
+          </div>
+          {jobError ? <p className="auth-error">{jobError}</p> : null}
+          {jobs.length === 0 ? <p className="empty-state">No jobs submitted yet.</p> : (
+            <div className="job-list">
+              {jobs.slice(0, 10).map((job) => (
+                <div className="job-row" key={job.id}>
+                  <div><strong>{job.action_type}</strong><p>{job.device_id} · {new Date(job.created_at).toLocaleString()}</p></div>
+                  <span className={`device-status ${job.status}`}>{job.status}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </>
     );

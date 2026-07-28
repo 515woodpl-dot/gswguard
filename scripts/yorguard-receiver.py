@@ -62,12 +62,39 @@ def heartbeat(api_base_url: str, credential: str, agent_version: str) -> None:
     )
 
 
+def process_test_job(api_base_url: str, credential: str) -> None:
+    """Claim and acknowledge only the non-privileged inventory test action."""
+    job = request_json(
+        f"{api_base_url.rstrip('/')}/api/v1/device/jobs/claim",
+        {},
+        {"Authorization": f"Device {credential}"},
+    )
+    if not job:
+        return
+    job_id = job["id"]
+    if job.get("action_type") == "refresh_inventory":
+        request_json(
+            f"{api_base_url.rstrip('/')}/api/v1/device/jobs/{job_id}/complete",
+            {"result": {"code": "acknowledged", "message": "Mac development receiver accepted the test job."}},
+            {"Authorization": f"Device {credential}"},
+        )
+        print(f"Acknowledged test job {job_id}")
+    else:
+        request_json(
+            f"{api_base_url.rstrip('/')}/api/v1/device/jobs/{job_id}/fail",
+            {"error_code": "unsupported_in_development_receiver"},
+            {"Authorization": f"Device {credential}"},
+        )
+        print(f"Rejected unsupported job {job_id}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="YorGuard macOS development receiver")
     parser.add_argument("--api-base-url", default=os.getenv("YORGUARD_API_BASE_URL", "http://100.127.37.0:8000"))
     parser.add_argument("--device-name", default=os.uname().nodename)
     parser.add_argument("--agent-version", default="0.1.0")
     parser.add_argument("--watch", type=int, metavar="SECONDS", help="send heartbeats repeatedly")
+    parser.add_argument("--jobs", action="store_true", help="claim and acknowledge safe development jobs")
     args = parser.parse_args()
     account = getpass.getuser()
     credential = keychain_read(account)
@@ -95,6 +122,8 @@ def main() -> None:
         try:
             heartbeat(args.api_base_url, credential, args.agent_version)
             print(f"Heartbeat accepted at {datetime.now().astimezone().isoformat(timespec='seconds')}")
+            if args.jobs:
+                process_test_job(args.api_base_url, credential)
             retry_delay = 15
             if not args.watch:
                 break
