@@ -63,6 +63,28 @@ type ComplianceEvaluation = {
   results: Array<{ passed: boolean; reason: string }>;
 };
 
+type WorkspaceView = 'overview' | 'devices' | 'policies' | 'activity';
+
+const policyRuleLabels: Record<string, string> = {
+  bitlocker: 'BitLocker encryption',
+  firewall: 'Firewall',
+  defender: 'Defender health',
+  secure_boot: 'Secure Boot',
+  tpm: 'TPM',
+  automatic_updates: 'Automatic updates',
+  windows_edition: 'Windows edition',
+};
+
+const policyExpectedOptions: Record<string, string[]> = {
+  bitlocker: ['on', 'off'],
+  firewall: ['on', 'off'],
+  defender: ['healthy', 'unhealthy'],
+  secure_boot: ['on', 'off'],
+  tpm: ['present', 'missing'],
+  automatic_updates: ['on', 'off'],
+  windows_edition: ['Pro', 'Enterprise', 'Education'],
+};
+
 type InventorySummary = {
   device_id: string;
   captured_at: string;
@@ -106,7 +128,6 @@ export function AuthPanel() {
   const [policies, setPolicies] = useState<PolicySummary[]>([]);
   const [policyError, setPolicyError] = useState<string | null>(null);
   const [policyBusy, setPolicyBusy] = useState(false);
-  const [policyKey, setPolicyKey] = useState('firewall-on');
   const [policyName, setPolicyName] = useState('Firewall enabled');
   const [policyRuleType, setPolicyRuleType] = useState('firewall');
   const [policyExpectedValue, setPolicyExpectedValue] = useState('on');
@@ -114,6 +135,7 @@ export function AuthPanel() {
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<WorkspaceView>('overview');
 
   useEffect(() => {
     let active = true;
@@ -208,6 +230,8 @@ export function AuthPanel() {
   }, [apiUser, config, session]);
 
   useEffect(() => {
+    // Latest inventory is an external API resource loaded after authentication.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadLatestInventory();
   }, [loadLatestInventory]);
 
@@ -227,6 +251,7 @@ export function AuthPanel() {
 
   useEffect(() => {
     // Job history is an external API resource loaded after authentication.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadJobs();
   }, [loadJobs]);
 
@@ -245,6 +270,8 @@ export function AuthPanel() {
   }, [apiUser, config, session]);
 
   useEffect(() => {
+    // Policy configuration is an external API resource loaded after authentication.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadPolicies();
   }, [loadPolicies]);
 
@@ -254,6 +281,7 @@ export function AuthPanel() {
     setPolicyBusy(true);
     setPolicyError(null);
     try {
+      const generatedPolicyKey = `${policyName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${policyRuleType}`;
       const response = await fetch(`${config.apiBaseUrl}/api/v1/compliance/policies`, {
         method: 'POST',
         headers: {
@@ -261,7 +289,7 @@ export function AuthPanel() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          policy_key: policyKey,
+          policy_key: generatedPolicyKey,
           name: policyName,
           rule_type: policyRuleType,
           expected_value: policyExpectedValue,
@@ -457,31 +485,45 @@ export function AuthPanel() {
       if (!latest.has(key)) latest.set(key, job);
       return latest;
     }, new Map<string, JobSummary>()).values());
+    const viewCopy: Record<WorkspaceView, { title: string; description: string }> = {
+      overview: { title: 'Fleet overview', description: 'A focused view of endpoint health and coverage.' },
+      devices: { title: 'Devices', description: 'Inspect endpoint status, inventory, and reported health.' },
+      policies: { title: 'Policies', description: 'Define observation rules against the latest endpoint inventory.' },
+      activity: { title: 'Activity', description: 'Review endpoint jobs and their current state.' },
+    };
+    const currentView = viewCopy[activeView];
     return (
       <div className="app-frame">
         <aside className="side-panel" aria-label="Primary navigation">
           <div className="side-brand"><span className="brand-mark">YG</span><span>YorGuard</span></div>
           <div className="side-workspace"><span className="status-dot" aria-hidden="true" /><div><strong>Control center</strong><small>Connected</small></div></div>
           <nav className="side-nav">
-            <a className="active" href="#overview"><span>⌂</span>Overview</a>
-            <a href="#devices"><span>▣</span>Devices</a>
-            <a href="#policies"><span>✓</span>Policies</a>
-            <a href="#jobs"><span>↗</span>Activity</a>
+            <button type="button" className={activeView === 'overview' ? 'active' : ''} onClick={() => setActiveView('overview')}><span>⌂</span>Overview</button>
+            <button type="button" className={activeView === 'devices' ? 'active' : ''} onClick={() => setActiveView('devices')}><span>▣</span>Devices</button>
+            <button type="button" className={activeView === 'policies' ? 'active' : ''} onClick={() => setActiveView('policies')}><span>✓</span>Policies</button>
+            <button type="button" className={activeView === 'activity' ? 'active' : ''} onClick={() => setActiveView('activity')}><span>↗</span>Activity</button>
           </nav>
           <div className="side-footer"><div><strong>{apiUser.email ?? session.user.email}</strong><small>{apiUser.role ?? 'authenticated'} · Verified</small></div><button type="button" className="side-signout" onClick={signOut}>Sign out</button></div>
         </aside>
         <main className="app-content">
           <header className="page-header" id="overview">
-            <div><p className="eyebrow">YorGuard control center</p><h1>Fleet overview</h1><p>Monitor endpoint health, enrollment, and platform coverage from one workspace.</p></div>
+            <div><p className="eyebrow">YorGuard control center</p><h1>{currentView.title}</h1><p>{currentView.description}</p></div>
             <div className="header-actions"><span className="api-pill"><span className="status-dot" aria-hidden="true" />API healthy</span>{apiUser.role === 'owner' || apiUser.role === 'administrator' ? <button type="button" onClick={() => void createEnrollmentToken()} disabled={tokenBusy}>{tokenBusy ? 'Creating…' : 'Add endpoint'}</button> : null}</div>
           </header>
+        {activeView === 'overview' ? <>
         <div className="metric-grid">
           <div className="metric-card"><span>Total devices</span><strong>{devices.length}</strong><small>Enrolled endpoints</small></div>
           <div className="metric-card metric-good"><span>Online now</span><strong>{onlineCount}</strong><small>Reporting normally</small></div>
           <div className="metric-card metric-attention"><span>Needs attention</span><strong>{attentionCount}</strong><small>Offline or revoked</small></div>
           <div className="metric-card"><span>Platforms</span><strong>{platformCount}</strong><small>Across the fleet</small></div>
         </div>
-        <section className="device-panel" id="devices" aria-labelledby="device-heading">
+        <div className="quick-grid">
+          <button type="button" className="quick-card" onClick={() => setActiveView('devices')}><span>Devices</span><strong>{devices.length} enrolled</strong><small>Open endpoint inventory →</small></button>
+          <button type="button" className="quick-card" onClick={() => setActiveView('policies')}><span>Policies</span><strong>{policies.length} configured</strong><small>Review compliance rules →</small></button>
+          <button type="button" className="quick-card" onClick={() => setActiveView('activity')}><span>Activity</span><strong>{latestJobs.length} recent jobs</strong><small>Review endpoint activity →</small></button>
+        </div>
+        </> : null}
+        {activeView === 'devices' ? <section className="device-panel" id="devices" aria-labelledby="device-heading">
           <div className="device-panel-heading">
             <div>
               <strong id="device-heading">Devices</strong>
@@ -540,12 +582,12 @@ export function AuthPanel() {
             </div>
             </>
           ) : null}
-        </section>
-        <section className="device-panel policy-panel" id="policies" aria-labelledby="policy-heading">
+        </section> : null}
+        {activeView === 'policies' ? <section className="device-panel policy-panel" id="policies" aria-labelledby="policy-heading">
             <div className="device-panel-heading">
             <div>
               <strong id="policy-heading">Policies</strong>
-              <p>{policies.length} configured compliance polic{policies.length === 1 ? 'y' : 'ies'}. Evaluation is observation-only by default.</p>
+              <p>{policies.length} rule{policies.length === 1 ? '' : 's'} configured · evaluation only, no automatic changes</p>
             </div>
             <div className="device-actions">
               <button type="button" className="secondary-button" onClick={() => void loadPolicies()}>Refresh policies</button>
@@ -558,14 +600,14 @@ export function AuthPanel() {
             <div className="policy-list">
               {policies.map((policy) => (
                 <div className="policy-row" key={policy.id}>
-                  <div><strong>{policy.name}</strong><p>{policy.rule_type} · expected {policy.expected_value} · weight {policy.weight}</p></div>
+                  <div><strong>{policy.name}</strong><p>Check {policyRuleLabels[policy.rule_type] ?? policy.rule_type} · required state: <b>{policy.expected_value}</b> · weight {policy.weight}</p></div>
                   <span className="policy-mode">{policy.automatic_remediation ? 'Remediation enabled' : 'Observe only'}</span>
                 </div>
               ))}
             </div>
           ) : null}
-        </section>
-        <section className="device-panel job-panel" id="jobs" aria-labelledby="job-heading">
+        </section> : null}
+        {activeView === 'activity' ? <section className="device-panel job-panel" id="jobs" aria-labelledby="job-heading">
           <div className="device-panel-heading">
             <div>
               <strong id="job-heading">Job Center</strong>
@@ -586,7 +628,7 @@ export function AuthPanel() {
               ))}
             </div>
           )}
-        </section>
+        </section> : null}
         {selectedDeviceId ? (() => {
           const selectedDevice = devices.find((device) => device.id === selectedDeviceId);
           const inventory = latestInventory.find((item) => item.device_id === selectedDeviceId);
@@ -632,10 +674,9 @@ export function AuthPanel() {
               <div className="modal-heading"><div><p className="eyebrow">Compliance</p><h2 id="policy-modal-title">Add a policy</h2></div><button type="button" className="modal-close" onClick={() => setPolicyModalOpen(false)} aria-label="Close">×</button></div>
               <p className="modal-copy">Policies start in observation-only mode. No remediation action will be submitted.</p>
               <form className="modal-form" onSubmit={createPolicy}>
-                <label>Policy key<input value={policyKey} onChange={(event) => setPolicyKey(event.target.value)} required /></label>
-                <label>Name<input value={policyName} onChange={(event) => setPolicyName(event.target.value)} required /></label>
-                <label>Rule<select value={policyRuleType} onChange={(event) => setPolicyRuleType(event.target.value)}><option value="bitlocker">BitLocker</option><option value="firewall">Firewall</option><option value="defender">Defender</option><option value="secure_boot">Secure Boot</option><option value="tpm">TPM</option><option value="automatic_updates">Automatic updates</option><option value="windows_edition">Windows edition</option></select></label>
-                <label>Expected value<input value={policyExpectedValue} onChange={(event) => setPolicyExpectedValue(event.target.value)} required /></label>
+                <label>Policy name<input value={policyName} onChange={(event) => setPolicyName(event.target.value)} required /></label>
+                <label>What should be checked<select value={policyRuleType} onChange={(event) => { const nextRule = event.target.value; setPolicyRuleType(nextRule); setPolicyExpectedValue(policyExpectedOptions[nextRule][0]); }}><option value="bitlocker">BitLocker encryption</option><option value="firewall">Firewall</option><option value="defender">Defender health</option><option value="secure_boot">Secure Boot</option><option value="tpm">TPM</option><option value="automatic_updates">Automatic updates</option><option value="windows_edition">Windows edition</option></select></label>
+                <label>Required state<select value={policyExpectedValue} onChange={(event) => setPolicyExpectedValue(event.target.value)} required>{policyExpectedOptions[policyRuleType].map((option) => <option key={option} value={option}>{option[0].toUpperCase() + option.slice(1)}</option>)}</select></label>
                 <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setPolicyModalOpen(false)}>Cancel</button><button type="submit" disabled={policyBusy}>{policyBusy ? 'Adding…' : 'Add policy'}</button></div>
               </form>
             </section>
