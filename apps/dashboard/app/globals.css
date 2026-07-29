@@ -67,6 +67,7 @@ h1 { max-width: 720px; margin: 1rem 0; font-size: clamp(2.5rem, 7vw, 5.6rem); li
 .device-row { padding: .9rem 0; border-bottom: 1px solid var(--line); }
 .device-status { padding: .25rem .5rem; border-radius: 999px; background: #f1f1ef; color: var(--muted); font-size: .75rem; font-weight: 700; text-transform: capitalize; }
 .device-status.online { background: #e2f2e9; color: var(--healthy); }
+.device-attention { display: block; margin-top: .35rem; color: #a33a2b; font-size: .82rem; }
 .auth-form { flex-wrap: wrap; }
 .auth-form label { display: grid; gap: .35rem; color: var(--muted); font-size: .82rem; }
 .auth-form input { min-width: 13rem; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: .55rem; background: #fff; color: inherit; }

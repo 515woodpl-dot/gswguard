@@ -433,6 +433,12 @@ export function AuthPanel() {
                   <div>
                     <strong>{device.device_name}</strong>
                     <p>{device.platform} · {[device.manufacturer, device.model].filter(Boolean).join(' · ') || 'Endpoint'} · Agent {device.agent_version}</p>
+                    {device.status !== 'online' ? (
+                      <small className="device-attention">
+                        Attention: {device.status === 'revoked' ? 'Device revoked' : 'No recent heartbeat'}
+                        {device.last_heartbeat_at ? ` · Last seen ${new Date(device.last_heartbeat_at).toLocaleString()}` : ' · Never reported a heartbeat'}
+                      </small>
+                    ) : null}
                     {(() => {
                       const inventory = latestInventory.find((item) => item.device_id === device.id);
                       if (!inventory) return <small>No inventory snapshot yet</small>;
