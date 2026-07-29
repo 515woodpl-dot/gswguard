@@ -103,6 +103,8 @@ export function AuthPanel() {
   const [policyRuleType, setPolicyRuleType] = useState('firewall');
   const [policyExpectedValue, setPolicyExpectedValue] = useState('on');
   const [complianceEvaluations, setComplianceEvaluations] = useState<ComplianceEvaluation[]>([]);
+  const [tokenModalOpen, setTokenModalOpen] = useState(false);
+  const [policyModalOpen, setPolicyModalOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -262,6 +264,7 @@ export function AuthPanel() {
       const body = (await response.json().catch(() => null)) as { detail?: string } | null;
       if (!response.ok) throw new Error(body?.detail ?? `Policy creation failed (${response.status})`);
       await loadPolicies();
+      setPolicyModalOpen(false);
     } catch (error: unknown) {
       setPolicyError(error instanceof Error ? error.message : 'Unable to create policy');
     } finally {
@@ -336,6 +339,7 @@ export function AuthPanel() {
       if (!response.ok || !body.token) throw new Error(body.detail ?? `Token creation failed (${response.status})`);
       setEnrollmentToken(body.token);
       setEnrollmentTokenExpires(body.expires_at ? new Date(body.expires_at).toLocaleString() : null);
+      setTokenModalOpen(true);
     } catch (error: unknown) {
       setDeviceError(error instanceof Error ? error.message : 'Unable to create enrollment token');
     } finally {
@@ -445,29 +449,23 @@ export function AuthPanel() {
       return latest;
     }, new Map<string, JobSummary>()).values());
     return (
-      <>
-        <div className="workspace-header" id="overview">
-          <div>
-            <p className="eyebrow">YorGuard control center</p>
-            <h2>Fleet overview</h2>
-            <p>Monitor endpoint health, enrollment, and platform coverage from one workspace.</p>
-          </div>
-          <nav className="workspace-nav" aria-label="Dashboard sections">
-            <a className="active" href="#overview">Overview</a>
-            <a href="#devices">Devices</a>
-            <span aria-disabled="true" title="Activity view is not enabled yet">Activity</span>
-            <a href="#policies">Policies</a>
+      <div className="app-frame">
+        <aside className="side-panel" aria-label="Primary navigation">
+          <div className="side-brand"><span className="brand-mark">YG</span><span>YorGuard</span></div>
+          <div className="side-workspace"><span className="status-dot" aria-hidden="true" /><div><strong>Control center</strong><small>Connected</small></div></div>
+          <nav className="side-nav">
+            <a className="active" href="#overview"><span>⌂</span>Overview</a>
+            <a href="#devices"><span>▣</span>Devices</a>
+            <a href="#policies"><span>✓</span>Policies</a>
+            <a href="#jobs"><span>↗</span>Activity</a>
           </nav>
-        </div>
-        <div className="auth-panel session-panel" role="status">
-          <div>
-            <strong>{apiUser.email ?? session.user.email}</strong>
-            <p>{apiUser.role ?? 'authenticated'} · API session verified</p>
-          </div>
-          <button type="button" className="secondary-button" onClick={signOut}>
-            Sign out
-          </button>
-        </div>
+          <div className="side-footer"><div><strong>{apiUser.email ?? session.user.email}</strong><small>{apiUser.role ?? 'authenticated'} · Verified</small></div><button type="button" className="side-signout" onClick={signOut}>Sign out</button></div>
+        </aside>
+        <main className="app-content">
+          <header className="page-header" id="overview">
+            <div><p className="eyebrow">YorGuard control center</p><h1>Fleet overview</h1><p>Monitor endpoint health, enrollment, and platform coverage from one workspace.</p></div>
+            <div className="header-actions"><span className="api-pill"><span className="status-dot" aria-hidden="true" />API healthy</span>{apiUser.role === 'owner' || apiUser.role === 'administrator' ? <button type="button" onClick={() => void createEnrollmentToken()} disabled={tokenBusy}>{tokenBusy ? 'Creating…' : 'Add endpoint'}</button> : null}</div>
+          </header>
         <div className="metric-grid">
           <div className="metric-card"><span>Total devices</span><strong>{devices.length}</strong><small>Enrolled endpoints</small></div>
           <div className="metric-card metric-good"><span>Online now</span><strong>{onlineCount}</strong><small>Reporting normally</small></div>
@@ -493,19 +491,6 @@ export function AuthPanel() {
             </div>
           </div>
           {deviceError ? <p className="auth-error">{deviceError}</p> : null}
-          {enrollmentToken ? (
-            <div className="token-result" role="status">
-              <strong>Copy this one-time token to the endpoint installer:</strong>
-              <code>{enrollmentToken}</code>
-              {enrollmentTokenExpires ? <span>Expires {enrollmentTokenExpires}</span> : null}
-              <button type="button" className="secondary-button token-copy" onClick={() => void copyEnrollmentToken()}>
-                {copyMessage ?? 'Copy token'}
-              </button>
-              <button type="button" className="secondary-button token-copy" onClick={downloadWindowsBootstrap}>
-                Download Windows bootstrap
-              </button>
-            </div>
-          ) : null}
           {!devicesLoaded ? <p className="empty-state">Loading device inventory…</p> : null}
           {devicesLoaded && devices.length === 0 && !deviceError ? <p className="empty-state">No devices enrolled yet. Create an enrollment token to add the first endpoint.</p> : null}
           {devices.length > 0 ? (
@@ -548,13 +533,14 @@ export function AuthPanel() {
           ) : null}
         </section>
         <section className="device-panel policy-panel" id="policies" aria-labelledby="policy-heading">
-          <div className="device-panel-heading">
+            <div className="device-panel-heading">
             <div>
               <strong id="policy-heading">Policies</strong>
               <p>{policies.length} configured compliance polic{policies.length === 1 ? 'y' : 'ies'}. Evaluation is observation-only by default.</p>
             </div>
             <div className="device-actions">
               <button type="button" className="secondary-button" onClick={() => void loadPolicies()}>Refresh policies</button>
+              {apiUser.role === 'owner' || apiUser.role === 'administrator' ? <button type="button" onClick={() => setPolicyModalOpen(true)}>Add policy</button> : null}
             </div>
           </div>
           {policyError ? <p className="auth-error">{policyError}</p> : null}
@@ -569,25 +555,8 @@ export function AuthPanel() {
               ))}
             </div>
           ) : null}
-          {apiUser.role === 'owner' || apiUser.role === 'administrator' ? (
-            <form className="policy-create" onSubmit={createPolicy}>
-              <label>Policy key<input value={policyKey} onChange={(event) => setPolicyKey(event.target.value)} required /></label>
-              <label>Name<input value={policyName} onChange={(event) => setPolicyName(event.target.value)} required /></label>
-              <label>Rule<select value={policyRuleType} onChange={(event) => setPolicyRuleType(event.target.value)}>
-                <option value="bitlocker">BitLocker</option>
-                <option value="firewall">Firewall</option>
-                <option value="defender">Defender</option>
-                <option value="secure_boot">Secure Boot</option>
-                <option value="tpm">TPM</option>
-                <option value="automatic_updates">Automatic updates</option>
-                <option value="windows_edition">Windows edition</option>
-              </select></label>
-              <label>Expected value<input value={policyExpectedValue} onChange={(event) => setPolicyExpectedValue(event.target.value)} required /></label>
-              <button type="submit" disabled={policyBusy}>{policyBusy ? 'Adding…' : 'Add policy'}</button>
-            </form>
-          ) : null}
         </section>
-        <section className="device-panel job-panel" aria-labelledby="job-heading">
+        <section className="device-panel job-panel" id="jobs" aria-labelledby="job-heading">
           <div className="device-panel-heading">
             <div>
               <strong id="job-heading">Job Center</strong>
@@ -609,28 +578,47 @@ export function AuthPanel() {
             </div>
           )}
         </section>
-      </>
+        {tokenModalOpen && enrollmentToken ? (
+          <div className="modal-backdrop" role="presentation" onMouseDown={() => setTokenModalOpen(false)}>
+            <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="token-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="modal-heading"><div><p className="eyebrow">Endpoint enrollment</p><h2 id="token-modal-title">Connect a device</h2></div><button type="button" className="modal-close" onClick={() => setTokenModalOpen(false)} aria-label="Close">×</button></div>
+              <p className="modal-copy">Use this one-time token in the endpoint installer. It expires {enrollmentTokenExpires ?? 'soon'}.</p>
+              <div className="token-result" role="status"><code>{enrollmentToken}</code><div className="modal-actions"><button type="button" className="secondary-button" onClick={() => void copyEnrollmentToken()}>{copyMessage ?? 'Copy token'}</button><button type="button" onClick={downloadWindowsBootstrap}>Download Windows bootstrap</button></div></div>
+            </section>
+          </div>
+        ) : null}
+        {policyModalOpen ? (
+          <div className="modal-backdrop" role="presentation" onMouseDown={() => setPolicyModalOpen(false)}>
+            <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="policy-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+              <div className="modal-heading"><div><p className="eyebrow">Compliance</p><h2 id="policy-modal-title">Add a policy</h2></div><button type="button" className="modal-close" onClick={() => setPolicyModalOpen(false)} aria-label="Close">×</button></div>
+              <p className="modal-copy">Policies start in observation-only mode. No remediation action will be submitted.</p>
+              <form className="modal-form" onSubmit={createPolicy}>
+                <label>Policy key<input value={policyKey} onChange={(event) => setPolicyKey(event.target.value)} required /></label>
+                <label>Name<input value={policyName} onChange={(event) => setPolicyName(event.target.value)} required /></label>
+                <label>Rule<select value={policyRuleType} onChange={(event) => setPolicyRuleType(event.target.value)}><option value="bitlocker">BitLocker</option><option value="firewall">Firewall</option><option value="defender">Defender</option><option value="secure_boot">Secure Boot</option><option value="tpm">TPM</option><option value="automatic_updates">Automatic updates</option><option value="windows_edition">Windows edition</option></select></label>
+                <label>Expected value<input value={policyExpectedValue} onChange={(event) => setPolicyExpectedValue(event.target.value)} required /></label>
+                <div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setPolicyModalOpen(false)}>Cancel</button><button type="submit" disabled={policyBusy}>{policyBusy ? 'Adding…' : 'Add policy'}</button></div>
+              </form>
+            </section>
+          </div>
+        ) : null}
+        </main>
+      </div>
     );
   }
 
   return (
-    <form className="auth-panel auth-form" onSubmit={submit}>
-      <div>
-        <strong>Sign in to YorGuard</strong>
-        <p>{message}</p>
-        {session && apiError ? <p className="auth-error">Backend response: {apiError}</p> : null}
-      </div>
-      <label>
-        Email
-        <input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
-      </label>
-      <label>
-        Password
-        <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required />
-      </label>
-      <button type="submit" disabled={busy}>
-        {busy ? 'Signing in…' : 'Sign in'}
-      </button>
-    </form>
+    <div className="auth-frame">
+      <aside className="auth-side"><div className="side-brand"><span className="brand-mark">YG</span><span>YorGuard</span></div><div className="auth-side-copy"><p className="eyebrow">Endpoint operations</p><h1>See what matters across every device.</h1><p>Secure enrollment, device health, and policy visibility in one focused workspace.</p></div><div className="side-health"><span className="status-dot" aria-hidden="true" /><div><strong>API contract healthy</strong><small>YorGuard service · v0.1.0</small></div></div></aside>
+      <section className="auth-content">
+        <div className="auth-content-heading"><span className="quiet-label">YorGuard control center</span><span className="secure-label">Private workspace</span></div>
+        <form className="login-card" onSubmit={submit}>
+          <div><p className="eyebrow">Welcome back</p><h2>Sign in to YorGuard</h2><p className="login-copy">{message}</p>{session && apiError ? <p className="auth-error">Backend response: {apiError}</p> : null}</div>
+          <label>Email<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+          <label>Password<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /></label>
+          <button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+        </form>
+      </section>
+    </div>
   );
 }
