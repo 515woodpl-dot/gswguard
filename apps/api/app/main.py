@@ -17,7 +17,7 @@ from .devices import DeviceEnrollmentRequest, DeviceRepository, EnrollmentTokenR
 from .enrollment import EnrollmentError, Heartbeat
 from .jobs import JobCreateRequest, JobFailureRequest, JobRepositoryError, JobRequest, JobResultRequest, PostgresJobRepository
 from .inventory import InventoryRepository, InventorySubmission
-from .compliance import PolicyCreateRequest, PolicyRepository, PolicyRepositoryError, PolicySummary
+from .compliance import ComplianceEvaluation, ComplianceRepository, PolicyCreateRequest, PolicyRepository, PolicyRepositoryError, PolicySummary
 
 settings = Settings.from_environment()
 settings.validate_for_production()
@@ -48,6 +48,7 @@ app.state.device_repository = DeviceRepository(settings.database_url) if setting
 app.state.job_repository = PostgresJobRepository(settings.database_url) if settings.database_url else None
 app.state.inventory_repository = InventoryRepository(settings.database_url) if settings.database_url else None
 app.state.policy_repository = PolicyRepository(settings.database_url) if settings.database_url else None
+app.state.compliance_repository = ComplianceRepository(settings.database_url) if settings.database_url else None
 
 
 def health_response(request_id: UUID | None = None) -> HealthResponse:
@@ -134,6 +135,13 @@ def policy_repository(request: Request) -> PolicyRepository:
     return repository
 
 
+def compliance_repository(request: Request) -> ComplianceRepository:
+    repository = request.app.state.compliance_repository
+    if repository is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    return repository
+
+
 def map_enrollment_error(error: EnrollmentError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error.code)
 
@@ -194,6 +202,16 @@ async def create_compliance_policy(
         return repository.create(user.organization_id, payload)
     except PolicyRepositoryError as error:
         raise map_policy_error(error) from error
+
+
+@app.get("/api/v1/compliance/latest", tags=["compliance"])
+async def latest_compliance(
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    repository: Annotated[ComplianceRepository, Depends(compliance_repository)],
+) -> list[ComplianceEvaluation]:
+    if user.organization_id is None:
+        raise HTTPException(status_code=403, detail="Organization membership required")
+    return repository.latest_for_organization(user.organization_id)
 
 
 @app.post("/api/v1/enrollment-tokens", tags=["devices"])

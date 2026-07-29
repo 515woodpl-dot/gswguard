@@ -224,3 +224,33 @@ class PolicyRepository:
             raise
         except psycopg.errors.UniqueViolation as exc:
             raise PolicyRepositoryError("policy_conflict") from exc
+
+
+class ComplianceRepository:
+    """Read-only evaluation adapter over the current policy and inventory rows."""
+
+    def __init__(self, database_url: str):
+        self.database_url = database_url
+
+    def latest_for_organization(self, organization_id: UUID) -> list[ComplianceEvaluation]:
+        import psycopg
+
+        policies = [
+            PolicyDefinition(**policy.model_dump(exclude={"id", "created_at", "updated_at"}))
+            for policy in PolicyRepository(self.database_url).list_for_organization(organization_id)
+        ]
+        with psycopg.connect(self.database_url) as connection:
+            rows = connection.execute(
+                """
+                select distinct on (device_id) device_id, payload
+                from public.inventory_snapshots
+                where organization_id = %s
+                order by device_id, captured_at desc, created_at desc
+                """,
+                (organization_id,),
+            ).fetchall()
+        evaluations: list[ComplianceEvaluation] = []
+        for device_id, payload in rows:
+            snapshot = InventorySnapshot.model_validate(payload)
+            evaluations.append(evaluate_compliance(device_id, snapshot, policies))
+        return evaluations

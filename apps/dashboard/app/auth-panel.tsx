@@ -55,6 +55,13 @@ type PolicySummary = {
   weight: number;
 };
 
+type ComplianceEvaluation = {
+  device_id: string;
+  score: number;
+  evaluated_at: string;
+  results: Array<{ passed: boolean; reason: string }>;
+};
+
 type InventorySummary = {
   device_id: string;
   captured_at: string;
@@ -95,6 +102,7 @@ export function AuthPanel() {
   const [policyName, setPolicyName] = useState('Firewall enabled');
   const [policyRuleType, setPolicyRuleType] = useState('firewall');
   const [policyExpectedValue, setPolicyExpectedValue] = useState('on');
+  const [complianceEvaluations, setComplianceEvaluations] = useState<ComplianceEvaluation[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -260,6 +268,23 @@ export function AuthPanel() {
       setPolicyBusy(false);
     }
   }
+
+  const loadCompliance = useCallback(async () => {
+    if (!config || !session || !apiUser) return;
+    await fetch(`${config.apiBaseUrl}/api/v1/compliance/latest`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Compliance evaluation failed (${response.status})`);
+        return (await response.json()) as ComplianceEvaluation[];
+      })
+      .then(setComplianceEvaluations)
+      .catch(() => setComplianceEvaluations([]));
+  }, [apiUser, config, session]);
+
+  useEffect(() => {
+    void loadCompliance();
+  }, [loadCompliance]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -511,7 +536,8 @@ export function AuthPanel() {
                       const inventory = latestInventory.find((item) => item.device_id === device.id);
                       if (!inventory) return <small>No inventory snapshot yet</small>;
                       const ramGb = inventory.snapshot.installed_ram_bytes ? Math.round(inventory.snapshot.installed_ram_bytes / 1024 ** 3) : null;
-                      return <small>Inventory {new Date(inventory.captured_at).toLocaleString()} · {inventory.snapshot.cpu?.name ?? 'CPU'} · {ramGb ? `${ramGb} GB RAM` : 'RAM unavailable'} · {inventory.snapshot.software?.length ?? 0} apps</small>;
+                      const compliance = complianceEvaluations.find((item) => item.device_id === device.id);
+                      return <small>Inventory {new Date(inventory.captured_at).toLocaleString()} · {inventory.snapshot.cpu?.name ?? 'CPU'} · {ramGb ? `${ramGb} GB RAM` : 'RAM unavailable'} · {inventory.snapshot.software?.length ?? 0} apps{compliance ? ` · Compliance ${compliance.score}%` : ''}</small>;
                     })()}
                   </div>
                   <span className={`device-status ${device.status}`}>{device.status}</span>
