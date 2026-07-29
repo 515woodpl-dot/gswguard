@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 label="com.yorguard.receiver"
 plist="$HOME/Library/LaunchAgents/$label.plist"
+api_base_url="${YORGUARD_API_BASE_URL:-https://gsw.tail8a6b99.ts.net:8443}"
 mkdir -p "$(dirname "$plist")"
 
 python_path="$(command -v python3)"
@@ -17,6 +18,7 @@ cat > "$plist" <<EOF
   <array>
     <string>$python_path</string>
     <string>$repo_root/scripts/yorguard-receiver.py</string>
+    <string>--api-base-url</string><string>$api_base_url</string>
     <string>--watch</string><string>300</string>
     <string>--jobs</string>
   </array>

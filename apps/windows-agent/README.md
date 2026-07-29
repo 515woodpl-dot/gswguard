@@ -7,7 +7,7 @@ From an elevated PowerShell prompt on the Windows computer, copy only `install-w
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\install-windows-agent.ps1 `
-  -ApiBaseUrl "http://100.127.37.0:8000" `
+  -ApiBaseUrl "https://gsw.tail8a6b99.ts.net:8443" `
   -EnrollmentToken "paste-the-one-time-token-here"
 ```
 
@@ -30,7 +30,7 @@ dotnet test GSWGuard.Agent.slnx
 Configure the receiver with environment variables before starting the agent:
 
 ```powershell
-$env:Agent__ApiBaseUrl = "http://100.127.37.0:8000"
+$env:Agent__ApiBaseUrl = "https://gsw.tail8a6b99.ts.net:8443"
 $env:Agent__EnrollmentToken = "yorg_enroll_..."
 $env:Agent__DeviceName = $env:COMPUTERNAME
 ```

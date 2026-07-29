@@ -16,7 +16,7 @@ public sealed class AgentOptions
 
     public string EnrollmentToken { get; init; } = "";
 
-    public string DeviceName { get; init; } = Environment.MachineName;
+    public string DeviceName { get; init; } = System.Environment.MachineName;
 
     public string Manufacturer { get; init; } = "";
 

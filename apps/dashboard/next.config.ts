@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
     return [{
       source: '/(.*)',
       headers: [
-        { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 http://100.127.37.0:8000 https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" },
+        { key: 'Content-Security-Policy', value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' http://localhost:8000 http://127.0.0.1:8000 https://gsw.tail8a6b99.ts.net:8443 https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" },
         { key: 'X-Content-Type-Options', value: 'nosniff' },
         { key: 'X-Frame-Options', value: 'DENY' },
         { key: 'Referrer-Policy', value: 'no-referrer' },

@@ -17,6 +17,7 @@ from .devices import DeviceEnrollmentRequest, DeviceRepository, EnrollmentTokenR
 from .enrollment import EnrollmentError, Heartbeat
 from .jobs import JobCreateRequest, JobFailureRequest, JobRepositoryError, JobRequest, JobResultRequest, PostgresJobRepository
 from .inventory import InventoryRepository, InventorySubmission
+from .compliance import ComplianceEvaluation, ComplianceRepository, PolicyCreateRequest, PolicyRepository, PolicyRepositoryError, PolicySummary
 
 settings = Settings.from_environment()
 settings.validate_for_production()
@@ -46,6 +47,8 @@ app.state.membership_repository = (
 app.state.device_repository = DeviceRepository(settings.database_url) if settings.database_url else None
 app.state.job_repository = PostgresJobRepository(settings.database_url) if settings.database_url else None
 app.state.inventory_repository = InventoryRepository(settings.database_url) if settings.database_url else None
+app.state.policy_repository = PolicyRepository(settings.database_url) if settings.database_url else None
+app.state.compliance_repository = ComplianceRepository(settings.database_url) if settings.database_url else None
 
 
 def health_response(request_id: UUID | None = None) -> HealthResponse:
@@ -125,6 +128,20 @@ def inventory_repository(request: Request) -> InventoryRepository:
     return repository
 
 
+def policy_repository(request: Request) -> PolicyRepository:
+    repository = request.app.state.policy_repository
+    if repository is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    return repository
+
+
+def compliance_repository(request: Request) -> ComplianceRepository:
+    repository = request.app.state.compliance_repository
+    if repository is None:
+        raise HTTPException(status_code=503, detail="Database is not configured")
+    return repository
+
+
 def map_enrollment_error(error: EnrollmentError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error.code)
 
@@ -135,6 +152,12 @@ def map_job_error(error: JobRepositoryError) -> HTTPException:
     if error.code == "job_not_claimed_or_device_unauthorized":
         return HTTPException(status_code=401, detail="Device is not authorized for this job")
     return HTTPException(status_code=409, detail=error.code)
+
+
+def map_policy_error(error: PolicyRepositoryError) -> HTTPException:
+    if error.code == "policy_conflict":
+        return HTTPException(status_code=409, detail=error.code)
+    return HTTPException(status_code=500, detail=error.code)
 
 
 @app.get("/api/v1/devices", response_model=list, tags=["devices"])
@@ -152,6 +175,40 @@ async def latest_inventory(
     user: Annotated[AuthenticatedUser, Depends(current_user)],
     repository: Annotated[InventoryRepository, Depends(inventory_repository)],
 ) -> list[dict[str, object]]:
+    if user.organization_id is None:
+        raise HTTPException(status_code=403, detail="Organization membership required")
+    return repository.latest_for_organization(user.organization_id)
+
+
+@app.get("/api/v1/compliance/policies", tags=["compliance"])
+async def list_compliance_policies(
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    repository: Annotated[PolicyRepository, Depends(policy_repository)],
+) -> list[PolicySummary]:
+    if user.organization_id is None:
+        raise HTTPException(status_code=403, detail="Organization membership required")
+    return repository.list_for_organization(user.organization_id)
+
+
+@app.post("/api/v1/compliance/policies", tags=["compliance"])
+async def create_compliance_policy(
+    payload: PolicyCreateRequest,
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    repository: Annotated[PolicyRepository, Depends(policy_repository)],
+) -> PolicySummary:
+    if user.organization_id is None or user.role not in {"owner", "administrator"}:
+        raise HTTPException(status_code=403, detail="Owner or administrator role required")
+    try:
+        return repository.create(user.organization_id, payload)
+    except PolicyRepositoryError as error:
+        raise map_policy_error(error) from error
+
+
+@app.get("/api/v1/compliance/latest", tags=["compliance"])
+async def latest_compliance(
+    user: Annotated[AuthenticatedUser, Depends(current_user)],
+    repository: Annotated[ComplianceRepository, Depends(compliance_repository)],
+) -> list[ComplianceEvaluation]:
     if user.organization_id is None:
         raise HTTPException(status_code=403, detail="Organization membership required")
     return repository.latest_for_organization(user.organization_id)
