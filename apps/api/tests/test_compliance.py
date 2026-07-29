@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from apps.api.app.compliance import (
+    PolicyCreateRequest,
     PolicyDefinition,
     RemediationGuard,
     RuleKey,
@@ -35,3 +36,16 @@ def test_failed_policy_lowers_score_and_auto_remediation_requires_explicit_enabl
     now = datetime(2026, 7, 24, tzinfo=UTC)
     assert guard.should_submit(device_id, policy, result.results[0], now)
     assert not guard.should_submit(device_id, policy, result.results[0], now)
+
+
+def test_policy_creation_defaults_to_observation_only() -> None:
+    policy = PolicyCreateRequest(
+        policy_key="firewall-on",
+        name="Firewall enabled",
+        rule_type=RuleKey.firewall,
+        expected_value="on",
+    )
+
+    assert policy.enabled
+    assert not policy.automatic_remediation
+    assert policy.weight == 1

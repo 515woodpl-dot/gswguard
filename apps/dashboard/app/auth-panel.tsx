@@ -44,6 +44,17 @@ type JobSummary = {
   error_code?: string | null;
 };
 
+type PolicySummary = {
+  id: string;
+  policy_key: string;
+  name: string;
+  rule_type: string;
+  expected_value: string;
+  enabled: boolean;
+  automatic_remediation: boolean;
+  weight: number;
+};
+
 type InventorySummary = {
   device_id: string;
   captured_at: string;
@@ -77,6 +88,13 @@ export function AuthPanel() {
   const [message, setMessage] = useState('Loading sign-in…');
   const [busy, setBusy] = useState(false);
   const [jobError, setJobError] = useState<string | null>(null);
+  const [policies, setPolicies] = useState<PolicySummary[]>([]);
+  const [policyError, setPolicyError] = useState<string | null>(null);
+  const [policyBusy, setPolicyBusy] = useState(false);
+  const [policyKey, setPolicyKey] = useState('firewall-on');
+  const [policyName, setPolicyName] = useState('Firewall enabled');
+  const [policyRuleType, setPolicyRuleType] = useState('firewall');
+  const [policyExpectedValue, setPolicyExpectedValue] = useState('on');
 
   useEffect(() => {
     let active = true;
@@ -192,6 +210,56 @@ export function AuthPanel() {
     // Job history is an external API resource loaded after authentication.
     void loadJobs();
   }, [loadJobs]);
+
+  const loadPolicies = useCallback(async () => {
+    if (!config || !session || !apiUser) return;
+    setPolicyError(null);
+    await fetch(`${config.apiBaseUrl}/api/v1/compliance/policies`, {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Policy load failed (${response.status})`);
+        return (await response.json()) as PolicySummary[];
+      })
+      .then(setPolicies)
+      .catch((error: unknown) => setPolicyError(error instanceof Error ? error.message : 'Unable to load policies'));
+  }, [apiUser, config, session]);
+
+  useEffect(() => {
+    void loadPolicies();
+  }, [loadPolicies]);
+
+  async function createPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!config || !session) return;
+    setPolicyBusy(true);
+    setPolicyError(null);
+    try {
+      const response = await fetch(`${config.apiBaseUrl}/api/v1/compliance/policies`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          policy_key: policyKey,
+          name: policyName,
+          rule_type: policyRuleType,
+          expected_value: policyExpectedValue,
+          enabled: true,
+          automatic_remediation: false,
+          weight: 1,
+        }),
+      });
+      const body = (await response.json().catch(() => null)) as { detail?: string } | null;
+      if (!response.ok) throw new Error(body?.detail ?? `Policy creation failed (${response.status})`);
+      await loadPolicies();
+    } catch (error: unknown) {
+      setPolicyError(error instanceof Error ? error.message : 'Unable to create policy');
+    } finally {
+      setPolicyBusy(false);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -363,7 +431,7 @@ export function AuthPanel() {
             <a className="active" href="#overview">Overview</a>
             <a href="#devices">Devices</a>
             <span aria-disabled="true" title="Activity view is not enabled yet">Activity</span>
-            <span aria-disabled="true" title="Policy view is not enabled yet">Policies</span>
+            <a href="#policies">Policies</a>
           </nav>
         </div>
         <div className="auth-panel session-panel" role="status">
@@ -451,6 +519,46 @@ export function AuthPanel() {
               ))}
             </div>
             </>
+          ) : null}
+        </section>
+        <section className="device-panel policy-panel" id="policies" aria-labelledby="policy-heading">
+          <div className="device-panel-heading">
+            <div>
+              <strong id="policy-heading">Policies</strong>
+              <p>{policies.length} configured compliance polic{policies.length === 1 ? 'y' : 'ies'}. Evaluation is observation-only by default.</p>
+            </div>
+            <div className="device-actions">
+              <button type="button" className="secondary-button" onClick={() => void loadPolicies()}>Refresh policies</button>
+            </div>
+          </div>
+          {policyError ? <p className="auth-error">{policyError}</p> : null}
+          {policies.length === 0 && !policyError ? <p className="empty-state">No compliance policies configured.</p> : null}
+          {policies.length > 0 ? (
+            <div className="policy-list">
+              {policies.map((policy) => (
+                <div className="policy-row" key={policy.id}>
+                  <div><strong>{policy.name}</strong><p>{policy.rule_type} · expected {policy.expected_value} · weight {policy.weight}</p></div>
+                  <span className="policy-mode">{policy.automatic_remediation ? 'Remediation enabled' : 'Observe only'}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {apiUser.role === 'owner' || apiUser.role === 'administrator' ? (
+            <form className="policy-create" onSubmit={createPolicy}>
+              <label>Policy key<input value={policyKey} onChange={(event) => setPolicyKey(event.target.value)} required /></label>
+              <label>Name<input value={policyName} onChange={(event) => setPolicyName(event.target.value)} required /></label>
+              <label>Rule<select value={policyRuleType} onChange={(event) => setPolicyRuleType(event.target.value)}>
+                <option value="bitlocker">BitLocker</option>
+                <option value="firewall">Firewall</option>
+                <option value="defender">Defender</option>
+                <option value="secure_boot">Secure Boot</option>
+                <option value="tpm">TPM</option>
+                <option value="automatic_updates">Automatic updates</option>
+                <option value="windows_edition">Windows edition</option>
+              </select></label>
+              <label>Expected value<input value={policyExpectedValue} onChange={(event) => setPolicyExpectedValue(event.target.value)} required /></label>
+              <button type="submit" disabled={policyBusy}>{policyBusy ? 'Adding…' : 'Add policy'}</button>
+            </form>
           ) : null}
         </section>
         <section className="device-panel job-panel" aria-labelledby="job-heading">
