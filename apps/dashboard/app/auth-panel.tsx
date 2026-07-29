@@ -237,7 +237,7 @@ export function AuthPanel() {
           Authorization: `Bearer ${session.access_token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ label: 'YorGuard endpoint', ttl_minutes: 60 }),
+        body: JSON.stringify({ label: 'YorGuard endpoint', ttl_minutes: 15 }),
       });
       const body = (await response.json()) as { token?: string; expires_at?: string; detail?: string };
       if (!response.ok || !body.token) throw new Error(body.detail ?? `Token creation failed (${response.status})`);
