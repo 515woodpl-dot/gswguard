@@ -26,6 +26,7 @@ type DeviceSummary = {
   device_name: string;
   manufacturer: string | null;
   model: string | null;
+  serial_number: string | null;
   agent_version: string;
   platform: string;
   os_version: string | null;
@@ -68,8 +69,15 @@ type InventorySummary = {
   snapshot: {
     platform?: string;
     os_version?: string;
+    manufacturer?: string;
+    model?: string;
+    serial_number?: string;
     cpu?: { name?: string; logical_processors?: number };
     installed_ram_bytes?: number;
+    security?: { bitlocker?: string; firewall?: string; defender?: string; secure_boot?: string; tpm?: string; automatic_updates?: string };
+    storage?: Array<{ name?: string; capacity_bytes?: number; free_bytes?: number }>;
+    network_adapters?: Array<{ name?: string; ip_addresses?: string[] }>;
+    local_accounts?: Array<{ name?: string; account_type?: string; is_administrator?: boolean }>;
     software?: unknown[];
   };
 };
@@ -105,6 +113,7 @@ export function AuthPanel() {
   const [complianceEvaluations, setComplianceEvaluations] = useState<ComplianceEvaluation[]>([]);
   const [tokenModalOpen, setTokenModalOpen] = useState(false);
   const [policyModalOpen, setPolicyModalOpen] = useState(false);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -507,7 +516,7 @@ export function AuthPanel() {
               </div>
             <div className="device-list">
               {visibleDevices.map((device) => (
-                <div className="device-row" key={device.id}>
+                <div className="device-row device-row-clickable" key={device.id} role="button" tabIndex={0} onClick={() => setSelectedDeviceId(device.id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') setSelectedDeviceId(device.id); }}>
                   <div>
                     <strong>{device.device_name}</strong>
                     <p>{device.platform} · {[device.manufacturer, device.model].filter(Boolean).join(' · ') || 'Endpoint'} · Agent {device.agent_version}</p>
@@ -578,6 +587,36 @@ export function AuthPanel() {
             </div>
           )}
         </section>
+        {selectedDeviceId ? (() => {
+          const selectedDevice = devices.find((device) => device.id === selectedDeviceId);
+          const inventory = latestInventory.find((item) => item.device_id === selectedDeviceId);
+          if (!selectedDevice) return null;
+          const snapshot = inventory?.snapshot;
+          const ramGb = snapshot?.installed_ram_bytes ? Math.round(snapshot.installed_ram_bytes / 1024 ** 3) : null;
+          const compliance = complianceEvaluations.find((item) => item.device_id === selectedDeviceId);
+          return (
+            <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelectedDeviceId(null)}>
+              <section className="modal-card inventory-modal" role="dialog" aria-modal="true" aria-labelledby="inventory-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+                <div className="modal-heading"><div><p className="eyebrow">Device details</p><h2 id="inventory-modal-title">{selectedDevice.device_name}</h2><p className="modal-copy">{selectedDevice.platform} · {selectedDevice.status} · Agent {selectedDevice.agent_version}</p></div><button type="button" className="modal-close" onClick={() => setSelectedDeviceId(null)} aria-label="Close">×</button></div>
+                {!snapshot ? <p className="empty-state">No inventory snapshot has been reported by this device yet.</p> : (
+                  <>
+                    <div className="detail-card-grid">
+                      <div><span>Hardware</span><strong>{snapshot.manufacturer ?? selectedDevice.manufacturer ?? 'Unknown'} {snapshot.model ?? selectedDevice.model ?? ''}</strong></div>
+                      <div><span>Operating system</span><strong>{snapshot.os_version ?? selectedDevice.os_version ?? 'Unknown'}</strong></div>
+                      <div><span>Processor</span><strong>{snapshot.cpu?.name ?? 'Unknown'}{snapshot.cpu?.logical_processors ? ` · ${snapshot.cpu.logical_processors} cores` : ''}</strong></div>
+                      <div><span>Memory</span><strong>{ramGb ? `${ramGb} GB RAM` : 'Unknown'}</strong></div>
+                      <div><span>Serial number</span><strong>{snapshot.serial_number ?? selectedDevice.serial_number ?? 'Unavailable'}</strong></div>
+                      <div><span>Compliance</span><strong>{compliance ? `${compliance.score}%` : 'Not evaluated'}</strong></div>
+                    </div>
+                    <div className="detail-section"><h3>Security posture</h3><div className="detail-chip-grid">{Object.entries(snapshot.security ?? {}).map(([key, value]) => <span className="detail-chip" key={key}><b>{key.replaceAll('_', ' ')}</b>{String(value)}</span>)}</div></div>
+                    <div className="detail-section"><h3>Storage and software</h3><p>{snapshot.storage?.length ?? 0} storage devices · {snapshot.software?.length ?? 0} installed applications</p></div>
+                    <div className="detail-section"><h3>Network and accounts</h3><p>{snapshot.network_adapters?.length ?? 0} network adapters · {snapshot.local_accounts?.length ?? 0} local accounts</p></div>
+                  </>
+                )}
+              </section>
+            </div>
+          );
+        })() : null}
         {tokenModalOpen && enrollmentToken ? (
           <div className="modal-backdrop" role="presentation" onMouseDown={() => setTokenModalOpen(false)}>
             <section className="modal-card" role="dialog" aria-modal="true" aria-labelledby="token-modal-title" onMouseDown={(event) => event.stopPropagation()}>

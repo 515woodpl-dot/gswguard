@@ -75,6 +75,8 @@ h1 { max-width: 720px; margin: 1rem 0; font-size: clamp(2.5rem, 7vw, 5.6rem); li
 .job-row p { margin: .25rem 0 0; color: var(--muted); font-size: .78rem; }
 .device-list { margin-top: 1rem; border-top: 1px solid var(--line); }
 .device-row { padding: .9rem 0; border-bottom: 1px solid var(--line); }
+.device-row-clickable { cursor: pointer; transition: background .15s ease, border-color .15s ease; }
+.device-row-clickable:hover, .device-row-clickable:focus-visible { margin: 0 -.65rem; padding-right: .65rem; padding-left: .65rem; border-radius: .55rem; outline: none; background: #faf4ee; }
 .device-status { padding: .25rem .5rem; border-radius: 999px; background: #f1f1ef; color: var(--muted); font-size: .75rem; font-weight: 700; text-transform: capitalize; }
 .device-status.online { background: #e2f2e9; color: var(--healthy); }
 .device-attention { display: block; margin-top: .35rem; color: #a33a2b; font-size: .82rem; }
@@ -121,6 +123,17 @@ footer { padding: 1.5rem 7vw; border-top: 1px solid var(--line); color: var(--mu
 .app-content .device-panel { padding: 1.35rem; border-radius: .9rem; box-shadow: 0 1px 2px rgba(25,28,30,.03); }
 .modal-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 1.25rem; background: rgba(24,27,29,.52); }
 .modal-card { width: min(560px, 100%); padding: 1.35rem; border: 1px solid var(--line); border-radius: 1rem; background: #fff; box-shadow: 0 1.5rem 4rem rgba(0,0,0,.2); }
+.inventory-modal { width: min(720px, 100%); max-height: min(760px, calc(100vh - 2.5rem)); overflow: auto; }
+.detail-card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .65rem; margin-top: 1.25rem; }
+.detail-card-grid > div { display: grid; gap: .35rem; min-height: 72px; padding: .75rem; border: 1px solid var(--line); border-radius: .65rem; background: #fafaf8; }
+.detail-card-grid span, .detail-section h3 { color: var(--muted); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.detail-card-grid strong { font-size: .86rem; line-height: 1.35; }
+.detail-section { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.detail-section h3 { margin: 0 0 .65rem; }
+.detail-section p { margin: 0; color: var(--muted); font-size: .85rem; }
+.detail-chip-grid { display: flex; flex-wrap: wrap; gap: .45rem; }
+.detail-chip { display: grid; gap: .15rem; padding: .5rem .6rem; border-radius: .5rem; background: #f1f1ef; color: var(--muted); font-size: .75rem; text-transform: capitalize; }
+.detail-chip b { color: var(--ink); font-size: .7rem; }
 .modal-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
 .modal-heading h2 { margin: .3rem 0 0; font-size: 1.65rem; letter-spacing: -.04em; }
 .modal-close { width: 2rem; height: 2rem; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: var(--muted); font-size: 1.3rem; line-height: 1; cursor: pointer; }
@@ -152,3 +165,4 @@ footer { padding: 1.5rem 7vw; border-top: 1px solid var(--line); color: var(--mu
 
 @media (max-width: 860px) { .app-frame, .auth-frame { grid-template-columns: 1fr; } .side-panel { min-height: auto; padding: .8rem 1rem; } .side-workspace, .side-footer { display: none; } .side-nav { grid-template-columns: repeat(4, 1fr); } .side-nav a { justify-content: center; padding: .6rem .35rem; font-size: .75rem; } .side-nav a span { display: none; } .page-header { align-items: start; flex-direction: column; } .header-actions { width: 100%; justify-content: space-between; } .auth-side { min-height: 320px; padding: 1.5rem; } .auth-side-copy { margin: 3rem 0 2rem; } .auth-side-copy h1 { font-size: clamp(2.2rem, 9vw, 4rem); } }
 @media (max-width: 560px) { .app-content { padding: 1.1rem; } .metric-grid { grid-template-columns: repeat(2, 1fr); } .app-content .metric-card { min-height: 112px; padding: .9rem; } .device-panel-heading, .device-row { align-items: start; flex-direction: column; } .device-actions { width: 100%; flex-wrap: wrap; } .device-actions button { flex: 1; } .modal-card { padding: 1rem; } .auth-content { padding: 1.25rem; } }
+@media (max-width: 560px) { .detail-card-grid { grid-template-columns: repeat(2, 1fr); } }
