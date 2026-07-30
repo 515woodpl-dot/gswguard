@@ -72,7 +72,7 @@ try {
             [Text.Encoding]::UTF8.GetBytes($signingKey.ToXmlString($false)))
         # Swap the pinned anchor for the generated one, leaving all logic intact.
         $source = Get-Content -Raw $verifierSource
-        $pattern = '(?m)^\$script:YorGuardSigningPublicKeyXmlBase64 = ".*"$'
+        $pattern = '(?m)^\$script:YorGuardSigningPublicKeyXmlBase64 = ".*"\r?$'
         $replacement = '$script:YorGuardSigningPublicKeyXmlBase64 = "' + $publicXmlBase64 + '"'
         $patched = [regex]::Replace($source, $pattern, $replacement)
         if ($patched -eq $source) { throw "Could not substitute the pinned key; the anchor line changed shape." }
@@ -217,7 +217,7 @@ try {
     Assert-Throws "unconfigured pinned key refuses to trust anything" {
         $unpinned = Join-Path $root "Unpinned.ps1"
         $src = Get-Content -Raw $verifier
-        $src = [regex]::Replace($src, '(?m)^\$script:YorGuardSigningPublicKeyXmlBase64 = ".*"$',
+        $src = [regex]::Replace($src, '(?m)^\$script:YorGuardSigningPublicKeyXmlBase64 = ".*"\r?$',
             '$script:YorGuardSigningPublicKeyXmlBase64 = "REPLACE_ME"')
         Set-Content -Path $unpinned -Value $src -Encoding UTF8
         & {
