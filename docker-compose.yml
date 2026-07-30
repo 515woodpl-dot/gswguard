@@ -4,17 +4,31 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    env_file: .env.local
+    # Shared non-secret config, then API-only secrets. Keeping secrets in a
+    # separate file means a new secret cannot leak into the dashboard by
+    # default; it has to be granted explicitly.
+    env_file:
+      - .env.local
+      - .env.secrets.local
+    # Loopback only. Tailscale Serve terminates HTTPS and proxies to
+    # 127.0.0.1:8000 (see docs/operations/tailscale-private-https.md). Binding
+    # 0.0.0.0 would publish enrollment, heartbeat and inventory - which carry
+    # device credentials - in plaintext to the whole local network.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
   dashboard:
     restart: unless-stopped
     build:
       context: .
       dockerfile: apps/dashboard/Dockerfile
     command: ["node", "server.js"]
-    env_file: .env.local
+    # Deliberately NOT given .env.secrets.local: the dashboard reads only
+    # SUPABASE_URL, SUPABASE_ANON_KEY, API_BASE_URL, AGENT_RELEASE_REF and
+    # AGENT_SIGNING_PUBLIC_KEY_XML_BASE64. It has no use for the database URL,
+    # the JWT signing secret or the service-role key.
+    env_file:
+      - .env.local
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - api

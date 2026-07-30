@@ -11,6 +11,19 @@ Tailscale terminates HTTPS and proxies to the local Docker services:
 - dashboard `127.0.0.1:3000`
 - API `127.0.0.1:8000`
 
+Both containers publish on the loopback interface only
+(`127.0.0.1:8000:8000` and `127.0.0.1:3000:3000` in `docker-compose.yml`).
+That is load-bearing, not cosmetic: publishing on `0.0.0.0` put the API — including
+`/api/v1/devices/enroll`, `/devices/heartbeat` and `/devices/inventory`, which
+carry enrollment tokens and device credentials — on the local network over
+plaintext HTTP, bypassing this whole HTTPS boundary. Verify after any Compose
+change:
+
+```bash
+ss -tlnp | grep -E '3000|8000'      # must show 127.0.0.1, never 0.0.0.0 or ::
+curl -m 5 "http://$(hostname -I | awk '{print $1}'):8000/api/v1/health/ready"   # must fail to connect
+```
+
 ## Pi configuration
 
 Run these commands on the Pi after confirming that ports 3000 and 8000 are
