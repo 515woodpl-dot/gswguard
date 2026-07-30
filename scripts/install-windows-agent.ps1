@@ -22,6 +22,10 @@ param(
     [string]$VersionUrl = "https://github.com/515woodpl-dot/gswguard/releases/download/v0.1.1/version.txt",
     [string]$ManifestUrl = "https://github.com/515woodpl-dot/gswguard/releases/download/v0.1.1/manifest.txt",
     [string]$SignatureUrl = "https://github.com/515woodpl-dot/gswguard/releases/download/v0.1.1/manifest.sig",
+    # Releases root the scheduled updater polls for a SIGNED channel pointer.
+    # The install itself uses the immutable pinned URLs above; the updater needs
+    # a stable location to learn that a newer signed release exists at all.
+    [string]$ReleaseBaseUrl = "https://github.com/515woodpl-dot/gswguard/releases",
     [string]$PackagePath,
     [string]$ManifestPath,
     [string]$SignaturePath,
@@ -51,8 +55,17 @@ function Assert-SecureUrl([string]$url, [string]$label) {
     }
 }
 Assert-SecureUrl $ApiBaseUrl "ApiBaseUrl"
-foreach ($u in @($PackageUrl, $VersionUrl, $ManifestUrl, $SignatureUrl)) {
+foreach ($u in @($PackageUrl, $VersionUrl, $ManifestUrl, $SignatureUrl, $ReleaseBaseUrl)) {
     Assert-SecureUrl $u "Download URL"
+}
+
+# Native commands ignore $ErrorActionPreference, so their exit codes have to be
+# checked explicitly or a failed service registration stays silent.
+function Invoke-Native([string]$description, [scriptblock]$command) {
+    $output = & $command 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "$description failed with exit code ${LASTEXITCODE}: $output"
+    }
 }
 
 $download = $PackagePath
@@ -92,6 +105,28 @@ $verifiedVersion = Assert-YorGuardPackageIntegrity `
 Remove-Item $extract -Recurse -Force -ErrorAction SilentlyContinue
 Expand-Archive -Path $download -DestinationPath $extract -Force
 New-Item -ItemType Directory -Force -Path $InstallDirectory | Out-Null
+
+# Lock the install directory down BEFORE writing appsettings.json into it. That
+# file carries the single-use enrollment token until the service consumes it,
+# and the default Program Files ACL grants Users:Read - so without this any
+# standard user on the machine could read the token and race the service to
+# enrol a rogue device.
+$acl = Get-Acl $InstallDirectory
+$acl.SetAccessRuleProtection($true, $false)
+foreach ($rule in @($acl.Access)) { [void]$acl.RemoveAccessRule($rule) }
+foreach ($sid in @(
+    [Security.Principal.WellKnownSidType]::LocalSystemSid,
+    [Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid
+)) {
+    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+        (New-Object Security.Principal.SecurityIdentifier($sid, $null)),
+        [Security.AccessControl.FileSystemRights]::FullControl,
+        [Security.AccessControl.InheritanceFlags]"ContainerInherit, ObjectInherit",
+        [Security.AccessControl.PropagationFlags]::None,
+        [Security.AccessControl.AccessControlType]::Allow)))
+}
+Set-Acl -Path $InstallDirectory -AclObject $acl
+
 Copy-Item "$extract\*" $InstallDirectory -Recurse -Force
 Set-Content (Join-Path $InstallDirectory "version.txt") -Value $verifiedVersion -Encoding ASCII
 
@@ -109,14 +144,43 @@ $settings = @{
     Logging = @{ LogLevel = @{ Default = "Information"; "Microsoft.Hosting.Lifetime" = "Information" } }
 } | ConvertTo-Json -Depth 5
 $settings | Set-Content (Join-Path $InstallDirectory "appsettings.json") -Encoding UTF8
-$VersionUrl | Set-Content (Join-Path $InstallDirectory "update-version-url.txt") -Encoding UTF8
+# Remove the pointer file left by older installs. The updater now discovers
+# versions through the signed channel pointer under $ReleaseBaseUrl, so a stale
+# pinned version URL on disk would only mislead whoever reads it next.
+Remove-Item (Join-Path $InstallDirectory "update-version-url.txt") -Force -ErrorAction SilentlyContinue
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($service) { Stop-Service $ServiceName -Force -ErrorAction SilentlyContinue; sc.exe delete $ServiceName | Out-Null }
-sc.exe create $ServiceName binPath= "`"$InstallDirectory\GSWGuard.Agent.exe`"" start= auto DisplayName= "YorGuard Agent" | Out-Null
-sc.exe description $ServiceName "YorGuard endpoint inventory and health receiver" | Out-Null
+if ($service) {
+    Stop-Service $ServiceName -Force -ErrorAction SilentlyContinue
+    Invoke-Native "sc.exe delete $ServiceName" { sc.exe delete $ServiceName }
+}
+Invoke-Native "sc.exe create $ServiceName" {
+    sc.exe create $ServiceName binPath= "`"$InstallDirectory\GSWGuard.Agent.exe`"" start= auto DisplayName= "YorGuard Agent"
+}
+Invoke-Native "sc.exe description $ServiceName" {
+    sc.exe description $ServiceName "YorGuard endpoint inventory and health receiver"
+}
+# Recovery actions: the baseline threat model requires the service to come back
+# after a crash rather than silently leaving the endpoint unmanaged.
+Invoke-Native "sc.exe failure $ServiceName" {
+    sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/300000
+}
 Start-Service $ServiceName
-& "$env:SystemRoot\System32\schtasks.exe" /Create /TN "YorGuardAgentUpdater" /SC HOURLY /MO 6 /RU SYSTEM /F /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$InstallDirectory\update-windows-agent.ps1`" -PackageUrl `"$PackageUrl`" -VersionUrl `"$VersionUrl`" -ManifestUrl `"$ManifestUrl`" -SignatureUrl `"$SignatureUrl`" -InstallDirectory `"$InstallDirectory`" -ServiceName `"$ServiceName`"" | Out-Null
+
+# The updater discovers new versions through the SIGNED channel pointer under
+# $ReleaseBaseUrl. It is deliberately NOT pinned to this install's release URLs:
+# doing that made the version check always compare equal, so updates never ran.
+$updaterArguments = @(
+    "-NoProfile", "-ExecutionPolicy", "Bypass",
+    "-File", "`"$InstallDirectory\update-windows-agent.ps1`"",
+    "-InstallDirectory", "`"$InstallDirectory`"",
+    "-ReleaseBaseUrl", "`"$($ReleaseBaseUrl.TrimEnd('/'))`"",
+    "-ServiceName", "`"$ServiceName`""
+) -join " "
+Invoke-Native "schtasks.exe /Create YorGuardAgentUpdater" {
+    & "$env:SystemRoot\System32\schtasks.exe" /Create /TN "YorGuardAgentUpdater" /SC HOURLY /MO 6 /RU SYSTEM /F `
+        /TR "powershell.exe $updaterArguments"
+}
 
 # The enrollment token is cleared by the service after successful enrollment;
 # clear only the transient download inputs here.

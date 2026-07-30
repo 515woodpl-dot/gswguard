@@ -47,22 +47,36 @@ jobs:
           $manifest = "version=$version`nsha256=$hash`nfile=yorguard-windows-agent.zip`n"
           Set-Content -Path manifest.txt -Value $manifest -NoNewline -Encoding ascii
 
+          # The channel pointer lets an installed agent discover that a newer
+          # release exists. It is fetched from a mutable URL
+          # (releases/latest/download/channel.txt), so it is signed with the same
+          # key; the agent then builds immutable per-version URLs from the
+          # version it names.
+          $issuedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+          $channel = "version=$version`nissued_at=$issuedAt`n"
+          Set-Content -Path channel.txt -Value $channel -NoNewline -Encoding ascii
+
           # Sign with built-in .NET RSA. The secret is a base64 PKCS#8 private key.
-          $manifestBytes = [System.IO.File]::ReadAllBytes("manifest.txt")
           $privDer = [Convert]::FromBase64String($env:RELEASE_SIGNING_PRIVATE_KEY)
           $rsa = [System.Security.Cryptography.RSA]::Create()
           try {
             $read = 0
             $rsa.ImportPkcs8PrivateKey($privDer, [ref]$read)
-            $sig = $rsa.SignData(
-              $manifestBytes,
-              [System.Security.Cryptography.HashAlgorithmName]::SHA256,
-              [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+            foreach ($pair in @(
+              @{ In = "manifest.txt"; Out = "manifest.sig" },
+              @{ In = "channel.txt";  Out = "channel.sig"  }
+            )) {
+              $bytes = [System.IO.File]::ReadAllBytes($pair.In)
+              $sig = $rsa.SignData(
+                $bytes,
+                [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+                [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
+              Set-Content -Path $pair.Out -Value ([Convert]::ToBase64String($sig)) -NoNewline -Encoding ascii
+            }
           } finally {
             $rsa.Dispose()
           }
-          Set-Content -Path manifest.sig -Value ([Convert]::ToBase64String($sig)) -NoNewline -Encoding ascii
-          Write-Host "Signed manifest for $version (sha256=$hash)"
+          Write-Host "Signed manifest and channel pointer for $version (sha256=$hash)"
 
       - name: Publish GitHub release
         shell: bash
@@ -72,6 +86,8 @@ jobs:
             publish/version.txt \
             manifest.txt \
             manifest.sig \
+            channel.txt \
+            channel.sig \
             --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}

@@ -38,9 +38,40 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --prefix apps/dashboard
+      # npm ci, not npm install: the lockfile is the pinned-dependency control
+      # the baseline threat model relies on.
+      - run: npm ci --prefix apps/dashboard
+      - run: npm --prefix apps/dashboard run lint
       - run: npm --prefix apps/dashboard run typecheck
       - run: npm --prefix apps/dashboard run build
+
+  update-trust:
+    name: Update-chain integrity checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Generates its own throwaway keypair, so it needs no signing secret and
+      # runs on every change to the trust code. Covers tampered packages and
+      # manifests, foreign-key signatures, version mismatch, an unconfigured
+      # pinned key, and the signed channel pointer.
+      - name: Verify fail-closed package and channel verification
+        shell: pwsh
+        run: ./scripts/test-yorguard-integrity.ps1
+      - name: Parse every PowerShell script
+        shell: pwsh
+        run: |
+          $failed = 0
+          Get-ChildItem -Path ./scripts -Filter *.ps1 | ForEach-Object {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName, [ref]$null, [ref]$errors)
+            if ($errors -and $errors.Count -gt 0) {
+              $failed++
+              Write-Host "::error file=$($_.FullName)::$($errors.Count) parse error(s)"
+              $errors | ForEach-Object { Write-Host "  line $($_.Extent.StartLineNumber): $($_.Message)" }
+            }
+          }
+          if ($failed -gt 0) { throw "$failed script(s) failed to parse." }
 
   windows-agent:
     name: Windows agent checks
