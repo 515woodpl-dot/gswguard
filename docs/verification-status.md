@@ -27,7 +27,36 @@ as release evidence.
 
 ## Current release gate: Windows update chain
 
-Status: **blocked; do not deploy to Windows endpoints yet.**
+Status: **still blocked, but for one remaining reason: no Windows end-to-end
+install/update test has been performed, and the agent changes of 2026-07-29 have
+not been compiled.** The signing chain itself is now verified.
+
+Directly verified on 2026-07-29 (see [the 2026-07-29 audit](audit-2026-07-29.md)):
+
+- The published `v0.1.1` manifest signature validates against the 2048-bit RSA
+  public key pinned in `scripts/YorGuardIntegrity.ps1`, and the package SHA-256
+  matches the signed manifest. Checked independently in Python and again through
+  `Assert-YorGuardPackageIntegrity` itself.
+- `scripts/test-yorguard-integrity.ps1` passes 15/15 fail-closed checks and no
+  longer needs the production private key, so it now runs in CI on every change
+  (`update-trust` job).
+- Corrections 1-5 below are closed. Correction 6 is closed except for the
+  Windows end-to-end test.
+- Pinning to an immutable release (correction 4) had silently killed the update
+  path: the updater polled a `version.txt` pinned to the installed release, so
+  the comparison was always equal. Replaced with a **signed channel pointer**,
+  so discovery is authenticated while executable bytes still come only from
+  immutable per-version URLs.
+
+Remaining before any Windows endpoint rollout:
+
+1. Run `dotnet build` and `dotnet test` on Windows CI for the 2026-07-29
+   `Worker.cs` / `DeviceCredentialStore.cs` changes. They could not be compiled
+   where they were written (arm64 Linux, TFM `net10.0-windows`).
+2. Publish one release containing `channel.txt`/`channel.sig` and perform a real
+   install, then a real update, on a Windows 11 machine.
+
+### Original correction list (for history)
 
 Directly verified on 2026-07-28:
 
