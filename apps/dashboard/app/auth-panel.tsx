@@ -58,10 +58,25 @@ type PolicySummary = {
 
 type ComplianceEvaluation = {
   device_id: string;
-  score: number;
+  // null when no policy produced usable evidence for this device, which is not
+  // the same as a measured 0%.
+  score: number | null;
   evaluated_at: string;
-  results: Array<{ passed: boolean; reason: string }>;
+  results: Array<{ passed: boolean; outcome: 'passed' | 'failed' | 'unknown'; reason: string }>;
+  unknown_count: number;
 };
+
+// Report what was actually measured. The agents currently report placeholder
+// values for most of the security posture, so a device can legitimately have
+// policies configured and still have nothing to score.
+function formatCompliance(evaluation: ComplianceEvaluation | undefined): string {
+  if (!evaluation) return 'Not evaluated';
+  if (evaluation.score === null) {
+    return evaluation.results.length === 0 ? 'No policies' : 'Awaiting evidence';
+  }
+  const unknown = evaluation.unknown_count > 0 ? ` · ${evaluation.unknown_count} awaiting evidence` : '';
+  return `${evaluation.score}%${unknown}`;
+}
 
 type WorkspaceView = 'overview' | 'devices' | 'policies' | 'activity';
 
@@ -492,6 +507,10 @@ export function AuthPanel() {
       activity: { title: 'Activity', description: 'Review endpoint jobs and their current state.' },
     };
     const currentView = viewCopy[activeView];
+    // True when policies exist but no device produced evidence any of them could
+    // score, so the Policies view can say so instead of implying 0% compliance.
+    const awaitingEvidence =
+      complianceEvaluations.length > 0 && complianceEvaluations.every((item) => item.score === null);
     return (
       <div className="app-frame">
         <aside className="side-panel" aria-label="Primary navigation">
@@ -573,7 +592,7 @@ export function AuthPanel() {
                       if (!inventory) return <small>No inventory snapshot yet</small>;
                       const ramGb = inventory.snapshot.installed_ram_bytes ? Math.round(inventory.snapshot.installed_ram_bytes / 1024 ** 3) : null;
                       const compliance = complianceEvaluations.find((item) => item.device_id === device.id);
-                      return <small>Inventory {new Date(inventory.captured_at).toLocaleString()} · {inventory.snapshot.cpu?.name ?? 'CPU'} · {ramGb ? `${ramGb} GB RAM` : 'RAM unavailable'} · {inventory.snapshot.software?.length ?? 0} apps{compliance ? ` · Compliance ${compliance.score}%` : ''}</small>;
+                      return <small>Inventory {new Date(inventory.captured_at).toLocaleString()} · {inventory.snapshot.cpu?.name ?? 'CPU'} · {ramGb ? `${ramGb} GB RAM` : 'RAM unavailable'} · {inventory.snapshot.software?.length ?? 0} apps{compliance ? ` · Compliance ${formatCompliance(compliance)}` : ''}</small>;
                     })()}
                   </div>
                   <span className={`device-status ${device.status}`}>{device.status}</span>
@@ -596,6 +615,13 @@ export function AuthPanel() {
           </div>
           {policyError ? <p className="auth-error">{policyError}</p> : null}
           {policies.length === 0 && !policyError ? <p className="empty-state">No compliance policies configured.</p> : null}
+          {policies.length > 0 && awaitingEvidence ? (
+            <p className="empty-state">
+              These rules are configured but cannot be scored yet: the endpoint agents do not
+              report the security fields they check, so every result is &ldquo;awaiting
+              evidence&rdquo; rather than pass or fail.
+            </p>
+          ) : null}
           {policies.length > 0 ? (
             <div className="policy-list">
               {policies.map((policy) => (
@@ -648,7 +674,7 @@ export function AuthPanel() {
                       <div><span>Processor</span><strong>{snapshot.cpu?.name ?? 'Unknown'}{snapshot.cpu?.logical_processors ? ` · ${snapshot.cpu.logical_processors} cores` : ''}</strong></div>
                       <div><span>Memory</span><strong>{ramGb ? `${ramGb} GB RAM` : 'Unknown'}</strong></div>
                       <div><span>Serial number</span><strong>{snapshot.serial_number ?? selectedDevice.serial_number ?? 'Unavailable'}</strong></div>
-                      <div><span>Compliance</span><strong>{compliance ? `${compliance.score}%` : 'Not evaluated'}</strong></div>
+                      <div><span>Compliance</span><strong>{formatCompliance(compliance)}</strong></div>
                     </div>
                     <div className="detail-section"><h3>Security posture</h3><div className="detail-chip-grid">{Object.entries(snapshot.security ?? {}).map(([key, value]) => <span className="detail-chip" key={key}><b>{key.replaceAll('_', ' ')}</b>{String(value)}</span>)}</div></div>
                     <div className="detail-section"><h3>Storage and software</h3><p>{snapshot.storage?.length ?? 0} storage devices · {snapshot.software?.length ?? 0} installed applications</p></div>

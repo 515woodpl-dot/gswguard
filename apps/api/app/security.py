@@ -40,6 +40,11 @@ class InProcessSlidingWindowLimiter:
         self._requests: defaultdict[str, deque[float]] = defaultdict(deque)
         self._lock = Lock()
 
+    def reset(self) -> None:
+        """Drop all counters. Used by tests to keep cases independent."""
+        with self._lock:
+            self._requests.clear()
+
     def allow(self, key: str, now: float) -> bool:
         with self._lock:
             window = self._requests[key]

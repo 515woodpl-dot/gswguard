@@ -177,8 +177,12 @@ class DeviceRepository:
         ]
 
 
-def device_credential(authorization: str) -> str:
+def device_credential(authorization: str | None) -> str:
+    if not authorization:
+        raise EnrollmentError("device_credential_required")
     scheme, _, credential = authorization.partition(" ")
+    # A human Supabase `Bearer` token must never satisfy a device credential;
+    # only the distinct `Device` scheme is accepted.
     if scheme.lower() != "device" or not credential:
         raise EnrollmentError("device_credential_required")
     return credential

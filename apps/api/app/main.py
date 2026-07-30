@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from .config import Settings
 from .auth import AuthenticatedUser, JwtVerifier, current_user
-from .security import RateLimitMiddleware, SecurityHeadersMiddleware
+from .security import InProcessSlidingWindowLimiter, RateLimitMiddleware, SecurityHeadersMiddleware
 from .membership import MembershipRepository
 from .devices import DeviceEnrollmentRequest, DeviceRepository, EnrollmentTokenRequest, device_credential
 from .enrollment import EnrollmentError, Heartbeat
@@ -34,7 +34,15 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RateLimitMiddleware, trusted_proxy_hops=settings.trusted_proxy_hops)
+# Held on app.state so operators can inspect it and tests can reset it between
+# cases. This limiter is still a single-process abuse brake, not a multi-instance
+# control, and behind a loopback reverse proxy every client shares one bucket.
+app.state.rate_limiter = InProcessSlidingWindowLimiter()
+app.add_middleware(
+    RateLimitMiddleware,
+    trusted_proxy_hops=settings.trusted_proxy_hops,
+    limiter=app.state.rate_limiter,
+)
 app.state.jwt_verifier = JwtVerifier(
     settings.supabase_jwt_secret,
     settings.supabase_jwt_issuer,
@@ -144,6 +152,21 @@ def compliance_repository(request: Request) -> ComplianceRepository:
 
 def map_enrollment_error(error: EnrollmentError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=error.code)
+
+
+def device_credential_header(
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> str:
+    """Resolve a device credential from the Authorization header.
+
+    Declared optional so a missing header is an authentication failure (401)
+    rather than a request-validation failure (422), and so a human `Bearer`
+    token can never be accepted where a `Device` credential is required.
+    """
+    try:
+        return device_credential(authorization)
+    except EnrollmentError as error:
+        raise map_enrollment_error(error) from error
 
 
 def map_job_error(error: JobRepositoryError) -> HTTPException:
@@ -286,11 +309,11 @@ async def list_jobs(
 
 @app.post("/api/v1/device/jobs/claim", tags=["jobs"])
 async def claim_device_job(
-    authorization: Annotated[str, Header(alias="Authorization")],
+    credential: Annotated[str, Depends(device_credential_header)],
     repository: Annotated[PostgresJobRepository, Depends(job_repository)],
 ) -> dict[str, object] | None:
     try:
-        job = repository.claim_for_device(device_credential(authorization))
+        job = repository.claim_for_device(credential)
     except EnrollmentError as error:
         raise map_enrollment_error(error) from error
     if job is None:
@@ -310,11 +333,11 @@ async def claim_device_job(
 async def complete_device_job(
     job_id: UUID,
     payload: JobResultRequest,
-    authorization: Annotated[str, Header(alias="Authorization")],
+    credential: Annotated[str, Depends(device_credential_header)],
     repository: Annotated[PostgresJobRepository, Depends(job_repository)],
 ) -> dict[str, object]:
     try:
-        job = repository.complete_for_device(device_credential(authorization), job_id, payload.result)
+        job = repository.complete_for_device(credential, job_id, payload.result)
         return {"id": job.id, "status": job.status, "completed_at": datetime.now(UTC)}
     except EnrollmentError as error:
         raise map_enrollment_error(error) from error
@@ -326,11 +349,11 @@ async def complete_device_job(
 async def fail_device_job(
     job_id: UUID,
     payload: JobFailureRequest,
-    authorization: Annotated[str, Header(alias="Authorization")],
+    credential: Annotated[str, Depends(device_credential_header)],
     repository: Annotated[PostgresJobRepository, Depends(job_repository)],
 ) -> dict[str, object]:
     try:
-        job = repository.fail_for_device(device_credential(authorization), job_id, payload.error_code)
+        job = repository.fail_for_device(credential, job_id, payload.error_code)
         return {"id": job.id, "status": job.status, "completed_at": datetime.now(UTC)}
     except EnrollmentError as error:
         raise map_enrollment_error(error) from error
@@ -352,11 +375,11 @@ async def enroll_device(
 @app.post("/api/v1/devices/heartbeat", tags=["devices"])
 async def device_heartbeat(
     payload: Heartbeat,
-    authorization: Annotated[str, Header(alias="Authorization")],
+    credential: Annotated[str, Depends(device_credential_header)],
     repository: Annotated[DeviceRepository, Depends(device_repository)],
 ) -> object:
     try:
-        return repository.heartbeat(device_credential(authorization), payload)
+        return repository.heartbeat(credential, payload)
     except EnrollmentError as error:
         raise map_enrollment_error(error) from error
 
@@ -364,11 +387,11 @@ async def device_heartbeat(
 @app.post("/api/v1/devices/inventory", tags=["inventory"])
 async def submit_inventory(
     payload: InventorySubmission,
-    authorization: Annotated[str, Header(alias="Authorization")],
+    credential: Annotated[str, Depends(device_credential_header)],
     repository: Annotated[InventoryRepository, Depends(inventory_repository)],
 ) -> dict[str, object]:
     try:
-        return repository.submit(device_credential(authorization), payload)
+        return repository.submit(credential, payload)
     except EnrollmentError as error:
         raise map_enrollment_error(error) from error
     except ValueError as error:

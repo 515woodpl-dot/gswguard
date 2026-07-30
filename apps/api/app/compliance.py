@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from .inventory import InventorySnapshot
 
@@ -21,6 +21,24 @@ class RuleKey(StrEnum):
     tpm = "tpm"
     automatic_updates = "automatic_updates"
     windows_edition = "windows_edition"
+
+
+class RuleOutcome(StrEnum):
+    passed = "passed"
+    failed = "failed"
+    # The agent did not report usable evidence for this field, or the field does
+    # not apply to the device's platform. Distinct from `failed`: absence of
+    # evidence is not evidence of non-compliance, so it must not lower a score
+    # and must never trigger remediation.
+    unknown = "unknown"
+
+
+# Placeholder tokens the collectors emit when a value could not be determined.
+# The Windows collector currently reports "not_collected" for every security
+# field and the macOS receiver reports "not_collected"/"not_applicable", so
+# without this every policy would read as a failure and every score as 0%.
+UNKNOWN_EVIDENCE = frozenset({"", "not_collected", "not_available", "unknown", "unavailable"})
+NOT_APPLICABLE_EVIDENCE = frozenset({"not_applicable", "n/a"})
 
 
 class PolicyDefinition(BaseModel):
@@ -44,26 +62,49 @@ class PolicySummary(PolicyDefinition):
 
 
 class RuleResult(BaseModel):
-    passed: bool
+    outcome: RuleOutcome
     reason: str = Field(min_length=1, max_length=500)
     evidence: dict[str, str]
+
+    @property
+    def passed(self) -> bool:
+        return self.outcome is RuleOutcome.passed
 
 
 class ComplianceResult(BaseModel):
     policy_key: str
-    passed: bool
+    outcome: RuleOutcome
     reason: str
     evidence: dict[str, str]
     weight: int
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def passed(self) -> bool:
+        """Kept in the serialized payload for existing consumers.
+
+        Note this is False for both `failed` and `unknown`; read `outcome` when
+        the difference matters.
+        """
+        return self.outcome is RuleOutcome.passed
 
 
 class ComplianceEvaluation(BaseModel):
     evaluation_id: UUID
     device_id: UUID
-    score: float = Field(ge=0, le=100)
+    # None when no policy produced usable evidence, so the UI can say
+    # "not evaluated" instead of implying a measured 0%.
+    score: float | None = Field(default=None, ge=0, le=100)
     evaluated_at: datetime
     evidence_hash: str
     results: list[ComplianceResult]
+    scored_weight: int = 0
+    unknown_weight: int = 0
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def unknown_count(self) -> int:
+        return sum(1 for result in self.results if result.outcome is RuleOutcome.unknown)
 
 
 class ComplianceRule(Protocol):
@@ -81,11 +122,31 @@ class FieldRule:
             actual = snapshot.windows.edition if snapshot.windows else "not_available"
         else:
             actual = getattr(snapshot.security, self.rule_type.value)
-        passed = actual.casefold() == policy.expected_value.casefold()
+        evidence = {
+            "field": self.rule_type.value,
+            "observed": actual,
+            "expected": policy.expected_value,
+        }
+        observed = actual.strip().casefold()
+
+        if observed in NOT_APPLICABLE_EVIDENCE:
+            return RuleResult(
+                outcome=RuleOutcome.unknown,
+                reason=f"{self.rule_type.value} does not apply to this platform; not scored.",
+                evidence=evidence,
+            )
+        if observed in UNKNOWN_EVIDENCE:
+            return RuleResult(
+                outcome=RuleOutcome.unknown,
+                reason=f"The agent did not report {self.rule_type.value}; not scored.",
+                evidence=evidence,
+            )
+
+        matched = observed == policy.expected_value.strip().casefold()
         return RuleResult(
-            passed=passed,
+            outcome=RuleOutcome.passed if matched else RuleOutcome.failed,
             reason=f"Expected {policy.expected_value}; observed {actual}.",
-            evidence={"field": self.rule_type.value, "observed": actual, "expected": policy.expected_value},
+            evidence=evidence,
         )
 
 
@@ -108,18 +169,33 @@ def evaluate_compliance(
         if not policy.enabled:
             continue
         result = RULES[policy.rule_type].evaluate(policy, snapshot)
-        results.append(ComplianceResult(policy_key=policy.policy_key, weight=policy.weight, **result.model_dump()))
-    total_weight = sum(result.weight for result in results)
-    passed_weight = sum(result.weight for result in results if result.passed)
-    score = 100.0 if total_weight == 0 else round((passed_weight / total_weight) * 100, 2)
-    evaluated_at = now or datetime.now(UTC)
+        results.append(
+            ComplianceResult(
+                policy_key=policy.policy_key,
+                weight=policy.weight,
+                outcome=result.outcome,
+                reason=result.reason,
+                evidence=result.evidence,
+            )
+        )
+
+    # Score only over policies that produced real evidence. Counting `unknown`
+    # as a failure would report a measured 0% for a device that simply has not
+    # reported that field yet.
+    scored_weight = sum(r.weight for r in results if r.outcome is not RuleOutcome.unknown)
+    unknown_weight = sum(r.weight for r in results if r.outcome is RuleOutcome.unknown)
+    passed_weight = sum(r.weight for r in results if r.outcome is RuleOutcome.passed)
+    score = None if scored_weight == 0 else round((passed_weight / scored_weight) * 100, 2)
+
     return ComplianceEvaluation(
         evaluation_id=uuid4(),
         device_id=device_id,
         score=score,
-        evaluated_at=evaluated_at,
+        evaluated_at=now or datetime.now(UTC),
         evidence_hash=evidence_hash(results),
         results=results,
+        scored_weight=scored_weight,
+        unknown_weight=unknown_weight,
     )
 
 
@@ -135,7 +211,11 @@ class RemediationGuard:
         evidence: ComplianceResult,
         now: datetime | None = None,
     ) -> bool:
-        if not policy.automatic_remediation or evidence.passed:
+        # Remediate only on a measured failure. The previous `not evidence.passed`
+        # test also fired for `unknown`, so a policy with automatic_remediation
+        # enabled would have submitted a privileged remediation job against a
+        # device that had merely failed to report the field.
+        if not policy.automatic_remediation or evidence.outcome is not RuleOutcome.failed:
             return False
         current = now or datetime.now(UTC)
         key = (device_id, policy.policy_key, hashlib.sha256(json.dumps(evidence.evidence, sort_keys=True).encode()).hexdigest())
