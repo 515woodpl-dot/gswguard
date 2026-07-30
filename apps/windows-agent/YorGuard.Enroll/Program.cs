@@ -34,6 +34,10 @@ if (!Uri.TryCreate(releaseBaseUrl, UriKind.Absolute, out var releaseUri) || rele
 }
 
 var token = Get(arguments, "enrollment-token", "");
+if (HasFlag(arguments, "enrollment-token-stdin"))
+{
+    token = Console.In.ReadToEnd().Trim();
+}
 if (string.IsNullOrWhiteSpace(token))
 {
     token = ReadHiddenToken();
@@ -98,6 +102,9 @@ static Dictionary<string, string> ParseArguments(string[] args)
 
 static string Get(IReadOnlyDictionary<string, string> values, string key, string fallback) =>
     values.TryGetValue(key, out var value) ? value : fallback;
+
+static bool HasFlag(IReadOnlyDictionary<string, string> values, string key) =>
+    values.ContainsKey(key);
 
 static string ReadHiddenToken()
 {

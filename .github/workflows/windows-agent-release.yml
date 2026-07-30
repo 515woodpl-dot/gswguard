@@ -23,10 +23,10 @@ jobs:
             -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -o publish
           Copy-Item scripts/install-windows-agent.ps1 publish/install-windows-agent.ps1
+          Copy-Item scripts/install-windows-agent-msi.ps1 publish/install-windows-agent-msi.ps1
           Copy-Item scripts/update-windows-agent.ps1 publish/update-windows-agent.ps1
           Copy-Item scripts/YorGuardIntegrity.ps1 publish/YorGuardIntegrity.ps1
           Set-Content publish/version.txt "${env:GITHUB_REF_NAME}" -NoNewline
-          Compress-Archive -Path publish/* -DestinationPath yorguard-windows-agent.zip
 
       - name: Publish enrollment helper
         shell: pwsh
@@ -35,6 +35,7 @@ jobs:
             -c Release -r win-x64 --self-contained true `
             -p:PublishSingleFile=true -o enroll-publish
           Copy-Item enroll-publish/YorGuardEnroll.exe publish/YorGuardEnroll.exe
+          Compress-Archive -Path publish/* -DestinationPath yorguard-windows-agent.zip
 
       - name: Build MSI
         shell: pwsh

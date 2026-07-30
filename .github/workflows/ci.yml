@@ -113,8 +113,10 @@ jobs:
             -p:EnrollPublishDir="$PWD\enroll-publish"
           $msi = Get-ChildItem apps/windows-installer/bin -Filter *.msi -Recurse | Select-Object -First 1
           if (-not $msi) { throw 'WiX build did not produce an MSI.' }
-          Copy-Item $msi.FullName YorGuardAgent.msi
+          New-Item -ItemType Directory -Force msi-artifact | Out-Null
+          Copy-Item $msi.FullName msi-artifact/YorGuardAgent.msi
+          Copy-Item scripts/install-windows-agent-msi.ps1 msi-artifact/install-windows-agent-msi.ps1
       - uses: actions/upload-artifact@v4
         with:
           name: YorGuardAgent-msi
-          path: YorGuardAgent.msi
+          path: msi-artifact/*
