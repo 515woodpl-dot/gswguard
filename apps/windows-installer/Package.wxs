@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="YorGuard Agent"
+    Manufacturer="YorGuard"
+    Version="$(var.ProductVersion)"
+    UpgradeCode="8A9C0C76-5F93-4C0E-A0D9-6D8A68C2BB61">
+    <SummaryInformation Manufacturer="YorGuard" Description="YorGuard Windows endpoint agent" />
+    <MajorUpgrade DowngradeErrorMessage="A newer YorGuard Agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="YorGuardFolder" Name="YorGuard">
+        <Directory Id="InstallFolder" Name="Agent">
+          <Component Id="AgentServiceComponent" Guid="8BD7BD6A-BB64-4A5D-B12F-2EAF33DA5D4B">
+            <File Id="AgentExecutable" Source="$(var.AgentPublishDir)/GSWGuard.Agent.exe" KeyPath="yes" />
+            <File Id="EnrollmentExecutable" Source="$(var.EnrollPublishDir)/YorGuardEnroll.exe" />
+            <File Id="AgentSettings" Source="$(var.AgentPublishDir)/appsettings.json" />
+            <File Id="AgentVersion" Source="$(var.AgentPublishDir)/version.txt" />
+            <File Id="AgentUpdater" Source="$(var.AgentPublishDir)/update-windows-agent.ps1" />
+            <File Id="AgentIntegrityVerifier" Source="$(var.AgentPublishDir)/YorGuardIntegrity.ps1" />
+            <ServiceInstall
+              Id="YorGuardAgentServiceInstall"
+              Name="YorGuardAgent"
+              DisplayName="YorGuard Agent"
+              Description="YorGuard endpoint inventory and health receiver"
+              Type="ownProcess"
+              Start="auto"
+              Account="LocalSystem"
+              ErrorControl="normal"
+              Vital="yes" />
+            <ServiceControl
+              Id="YorGuardAgentServiceControl"
+              Name="YorGuardAgent"
+              Start="install"
+              Stop="both"
+              Remove="uninstall"
+              Wait="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="YorGuard Agent" Level="1">
+      <ComponentRef Id="AgentServiceComponent" />
+    </Feature>
+  </Package>
+</Wix>

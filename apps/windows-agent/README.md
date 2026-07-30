@@ -2,7 +2,20 @@
 
 This is a small Windows Service. It enrolls with a one-time token, stores the device credential with Windows DPAPI, then automatically sends a heartbeat and inventory snapshot every five minutes. It collects approved metadata only: OS/build, hardware, disks, network adapters, local account names, and installed software names/versions. It does not collect browser history, document contents, or user files.
 
-From an elevated PowerShell prompt on the Windows computer, copy only `install-windows-agent.ps1` and run it from the folder containing that file:
+The preferred Windows deployment artifact is `YorGuardAgent.msi`. It installs
+the service and enrollment helper without requiring a user to execute a
+PowerShell script. After installing the MSI as Administrator, run the helper
+once from an elevated console; it prompts privately for this computer's unique
+one-time token:
+
+```powershell
+& 'C:\Program Files\YorGuard\Agent\YorGuardEnroll.exe' `
+  --api-base-url 'https://gsw.tail8a6b99.ts.net:8443'
+```
+
+For the current bootstrap fallback, from an elevated PowerShell prompt on the
+Windows computer, copy `install-windows-agent.ps1` and
+`YorGuardIntegrity.ps1` into the same folder and run:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass

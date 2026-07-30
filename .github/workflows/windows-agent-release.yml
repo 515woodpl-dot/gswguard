@@ -28,6 +28,47 @@ jobs:
           Set-Content publish/version.txt "${env:GITHUB_REF_NAME}" -NoNewline
           Compress-Archive -Path publish/* -DestinationPath yorguard-windows-agent.zip
 
+      - name: Publish enrollment helper
+        shell: pwsh
+        run: |
+          dotnet publish apps/windows-agent/YorGuard.Enroll/YorGuard.Enroll.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -o enroll-publish
+          Copy-Item enroll-publish/YorGuardEnroll.exe publish/YorGuardEnroll.exe
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $version = "${env:GITHUB_REF_NAME}".TrimStart('v')
+          dotnet build apps/windows-installer/YorGuard.Agent.Installer.wixproj `
+            -c Release -p:ProductVersion=$version `
+            -p:AgentPublishDir="$PWD\publish" `
+            -p:EnrollPublishDir="$PWD\enroll-publish"
+          $msi = Get-ChildItem apps/windows-installer/bin -Filter *.msi -Recurse | Select-Object -First 1
+          if (-not $msi) { throw "WiX build did not produce an MSI." }
+          Copy-Item $msi.FullName YorGuardAgent.msi
+
+      - name: Sign MSI with Authenticode
+        shell: pwsh
+        env:
+          MSI_SIGNING_PFX_B64: ${{ secrets.MSI_SIGNING_PFX_B64 }}
+          MSI_SIGNING_PFX_PASSWORD: ${{ secrets.MSI_SIGNING_PFX_PASSWORD }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          if ([string]::IsNullOrWhiteSpace($env:MSI_SIGNING_PFX_B64) -or [string]::IsNullOrWhiteSpace($env:MSI_SIGNING_PFX_PASSWORD)) {
+            throw "MSI signing secrets are not configured. Refusing to publish an unsigned MSI."
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "yorguard-msi-signing.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:MSI_SIGNING_PFX_B64))
+          try {
+            & signtool.exe sign /fd SHA256 /f $pfxPath /p $env:MSI_SIGNING_PFX_PASSWORD /tr http://timestamp.digicert.com /td SHA256 YorGuardAgent.msi
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
+            & signtool.exe verify /pa /all YorGuardAgent.msi
+            if ($LASTEXITCODE -ne 0) { throw "signtool verification failed with exit code $LASTEXITCODE" }
+          } finally {
+            Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
+          }
+
       # Publish a manifest (version + package hash) and a detached RSA-SHA256
       # signature over it. Endpoints verify the signature against a pinned public
       # key, so trust is anchored to the key rather than to the release URL.
@@ -83,6 +124,7 @@ jobs:
         run: |
           gh release create "${GITHUB_REF_NAME}" \
             yorguard-windows-agent.zip \
+            YorGuardAgent.msi \
             publish/version.txt \
             manifest.txt \
             manifest.sig \

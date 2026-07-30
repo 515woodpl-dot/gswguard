@@ -83,3 +83,38 @@ jobs:
           dotnet-version: '10.0.x'
       - run: dotnet build apps/windows-agent/GSWGuard.Agent.slnx
       - run: dotnet test apps/windows-agent/GSWGuard.Agent.slnx --no-build
+
+  windows-installer:
+    name: Windows MSI package
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Publish agent payload
+        shell: pwsh
+        run: |
+          dotnet publish apps/windows-agent/GSWGuard.Agent/GSWGuard.Agent.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -o publish
+          dotnet publish apps/windows-agent/YorGuard.Enroll/YorGuard.Enroll.csproj `
+            -c Release -r win-x64 --self-contained true `
+            -p:PublishSingleFile=true -o enroll-publish
+          Copy-Item enroll-publish/YorGuardEnroll.exe publish/YorGuardEnroll.exe
+          Copy-Item scripts/update-windows-agent.ps1, scripts/YorGuardIntegrity.ps1 publish/
+          Set-Content publish/version.txt '0.1.0' -NoNewline
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          dotnet build apps/windows-installer/YorGuard.Agent.Installer.wixproj `
+            -c Release -p:ProductVersion=0.1.0 `
+            -p:AgentPublishDir="$PWD\publish" `
+            -p:EnrollPublishDir="$PWD\enroll-publish"
+          $msi = Get-ChildItem apps/windows-installer/bin -Filter *.msi -Recurse | Select-Object -First 1
+          if (-not $msi) { throw 'WiX build did not produce an MSI.' }
+          Copy-Item $msi.FullName YorGuardAgent.msi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: YorGuardAgent-msi
+          path: YorGuardAgent.msi
